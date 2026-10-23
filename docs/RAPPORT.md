@@ -189,8 +189,13 @@ coiffe, cape et même barbe selon la personnalisation.
     tour avec les mêmes touches. Les héros sont **copiés** à PV pleins :
     duel amical, sans XP ni K.O. durable, et un même héros peut jouer des
     deux côtés. Bouton « Revanche » à la fin.
-  - *Duel en ligne* : 1 contre 1 entre deux PC. L'un héberge (son IP
-    s'affiche), l'autre tape cette IP. Le moteur a son propre générateur
+  - *Niveau en duel* : niveaux actuels, ou tous les héros ramenés au même
+    niveau (`imposerNiveau` : stats de la classe à ce niveau, sans arme ni
+    points bonus) pour éviter les écarts trop grands.
+  - *Duel en ligne* : de 1 contre 1 à 4 contre 4 entre deux PC (Linux,
+    macOS ou Windows : sockets POSIX ou Winsock). L'un héberge et choisit
+    le format (héros par équipe, niveau), son IP s'affiche ; l'autre tape
+    cette IP. Le moteur a son propre générateur
     aléatoire (`combatGraine`) : avec la même graine et les mêmes actions,
     les deux machines calculent exactement le même combat, donc seules les
     actions circulent (protocole simple, entiers écrits octet par octet).

@@ -193,6 +193,17 @@ int xpPourNiveauSuivant(const Personnage *p);
  */
 void gagnerXp(Personnage *p, int xp);
 
+/** Niveau maximum proposé pour les duels à niveau imposé. */
+#define NIVEAU_DUEL_MAX 30
+
+/**
+ * Duel à niveau imposé : remplace les statistiques du héros par celles de
+ * sa classe au niveau donné (mêmes gains qu'en montant de niveau). Le nom,
+ * l'élément et l'apparence sont gardés ; l'arme, l'XP et les points de
+ * stats dépensés ne comptent pas. À appeler sur une copie.
+ */
+void imposerNiveau(Personnage *p, int niveau);
+
 /** Libellé d'une statistique ("Points de vie", "Attaque"...). */
 const char *nomStat(enum Stat s);
 

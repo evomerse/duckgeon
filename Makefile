@@ -7,6 +7,11 @@ EXEC_GUI = duckgeon
 SDL_CFLAGS = $(shell pkg-config --cflags sdl2 SDL2_ttf)
 SDL_LIBS   = $(shell pkg-config --libs sdl2 SDL2_ttf) -lm
 
+# Windows (MSYS2) : le duel en ligne utilise Winsock
+ifeq ($(OS),Windows_NT)
+SDL_LIBS  += -lws2_32 -liphlpapi
+endif
+
 # Logique métier, partagée par les deux versions
 LOGIQUE = personnage objet inventaire saisie donjon sauvegarde boutique combat
 # Version console
@@ -51,7 +56,7 @@ valgrind: $(EXEC)
 	valgrind --leak-check=full --show-leak-kinds=all ./$(EXEC)
 
 clean:
-	rm -rf build $(EXEC) $(EXEC_GUI)
+	rm -rf build $(EXEC) $(EXEC_GUI) $(EXEC).exe $(EXEC_GUI).exe
 
 # Supprime aussi la sauvegarde locale
 reset: clean

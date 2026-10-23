@@ -9,15 +9,19 @@
  *
  * Tout est non bloquant : on appelle reseauMaj() à chaque image, qui
  * avance la connexion et range les messages reçus dans une file.
+ * Fonctionne avec les sockets POSIX (Linux, macOS) et Winsock (Windows).
  */
 #ifndef RESEAU_H
 #define RESEAU_H
 
+#include <stdint.h>
+
 #include "personnage.h"
 
-#define RESEAU_PORT     5050
-#define RESEAU_FILE_MAX 32
-#define RESEAU_TAMPON   2048
+#define RESEAU_PORT       5050
+#define RESEAU_FILE_MAX   32
+#define RESEAU_TAMPON     4096
+#define RESEAU_HEROS_MAX  4   /* héros par équipe (= COMBAT_MAX_ALLIES) */
 
 /** Où en est la connexion. */
 enum EtatReseau {
@@ -30,29 +34,38 @@ enum EtatReseau {
 
 /** Types de messages échangés. */
 enum TypeMessage {
-    MSG_BONJOUR = 1,    /**< héros du joueur (+ graine si c'est l'hôte) */
+    MSG_BONJOUR = 1,    /**< équipe du joueur (+ format et graine si hôte) */
     MSG_ACTION,         /**< une action jouée pendant le duel      */
     MSG_REVANCHE,       /**< relancer le duel (numéro de manche)   */
     MSG_QUITTER         /**< le joueur quitte le duel              */
 };
 
+/** Format d'un duel en ligne, choisi par l'hôte. */
+typedef struct {
+    int taille;          /**< héros par équipe (1 à RESEAU_HEROS_MAX)    */
+    int niveau;          /**< 0 : niveaux actuels, sinon niveau imposé   */
+    unsigned graine;     /**< hasard du duel                             */
+} FormatDuel;
+
 /** Un message reçu (champs utiles selon le type). */
 typedef struct {
     enum TypeMessage type;
-    unsigned graine;     /**< MSG_BONJOUR (hôte)                    */
-    Personnage heros;    /**< MSG_BONJOUR                           */
+    FormatDuel format;   /**< MSG_BONJOUR (envoyé par l'hôte)        */
+    Personnage heros[RESEAU_HEROS_MAX]; /**< MSG_BONJOUR : l'équipe   */
+    int nbHeros;
     int manche;          /**< MSG_ACTION, MSG_REVANCHE              */
     int tour;            /**< MSG_ACTION : tour du combat           */
     int lanceur, action, cible;
     unsigned controle;   /**< MSG_ACTION : empreinte de l'état      */
 } Message;
 
-/** Une connexion (hôte ou invité). */
+/** Une connexion (hôte ou invité). Les sockets sont rangées dans un
+ *  intptr_t pour couvrir les deux systèmes (-1 : aucune). */
 typedef struct {
     enum EtatReseau etat;
     int hote;            /**< 1 : on héberge, 0 : on a rejoint      */
-    int ecoute;          /**< socket d'écoute (hôte), -1 sinon       */
-    int sock;            /**< socket vers l'autre joueur, -1 sinon   */
+    intptr_t ecoute;     /**< socket d'écoute (hôte), -1 sinon       */
+    intptr_t sock;       /**< socket vers l'autre joueur, -1 sinon   */
     char erreur[96];     /**< raison du dernier échec               */
 
     unsigned char recu[RESEAU_TAMPON]; /**< octets pas encore découpés */
@@ -88,8 +101,8 @@ void reseauRetirer(Reseau *r);
  *  exactement des mêmes données. */
 void reseauPreparerHeros(const Personnage *source, Personnage *copie);
 
-/** Envoie notre héros (et la graine du duel si on héberge). */
-int reseauEnvoyerBonjour(Reseau *r, const Personnage *heros, unsigned graine);
+/** Envoie notre équipe (n héros) et, pour l'hôte, le format du duel. */
+int reseauEnvoyerBonjour(Reseau *r, const Personnage heros[], int n, const FormatDuel *format);
 
 /** Envoie une action jouée. */
 int reseauEnvoyerAction(Reseau *r, int manche, int tour, int lanceur, int action, int cible,

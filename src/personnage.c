@@ -254,6 +254,27 @@ void gagnerXp(Personnage *p, int xp)
     }
 }
 
+void imposerNiveau(Personnage *p, int niveau)
+{
+    if (p == NULL || niveau < 1) {
+        return;
+    }
+    /* On repart des statistiques de la classe : seuls le nom, l'élément et
+     * l'apparence du héros sont gardés (pas d'arme, pas de points bonus). */
+    enum Element element = p->element;
+    Apparence apparence = p->apparence;
+    initialiserStats(p, p->classe);
+    p->element = element;
+    p->apparence = apparence;
+    for (int n = 1; n < niveau; n++) { /* mêmes gains qu'une vraie montée */
+        p->niveau++;
+        p->pvMax += GAIN_PV_NIVEAU;
+        p->atk += GAIN_ATK_NIVEAU;
+        p->def += GAIN_DEF_NIVEAU;
+    }
+    p->pv = p->pvMax;
+}
+
 const char *nomStat(enum Stat s)
 {
     static const char *const NOMS[NB_STATS] = { "Points de vie", "Attaque", "Defense", "Vitesse" };

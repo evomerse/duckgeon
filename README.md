@@ -55,12 +55,12 @@ Duckgeon **SDL2** et **SDL2_ttf**. La version console n'a besoin de rien d'autre
 | Debian / Ubuntu    | `sudo apt install build-essential pkg-config libsdl2-dev libsdl2-ttf-dev` |
 | Arch / Manjaro     | `sudo pacman -S base-devel sdl2 sdl2_ttf`                               |
 | macOS (Homebrew)   | `brew install sdl2 sdl2_ttf pkg-config`                                 |
-| Windows (MSYS2 UCRT64) | `pacman -S mingw-w64-ucrt-x86_64-gcc mingw-w64-ucrt-x86_64-SDL2 mingw-w64-ucrt-x86_64-SDL2_ttf make pkgconf` |
+| Windows            | via **MSYS2**, voir [Windows pas à pas](#windows-pas-à-pas) ci-dessous   |
 
 ### 2. Récupérer et compiler
 
 ```bash
-git clone <url-du-dépôt> duckgeon
+git clone https://github.com/evomerse/duckgeon.git
 cd duckgeon
 make            # compile ./duckgeon (graphique) et ./donjon (console)
 ```
@@ -72,6 +72,91 @@ Pour une seule version : `make gui` ou `make console`.
 ```bash
 ./duckgeon      # ou : make run-gui
 ./donjon        # ou : make run
+```
+
+### Windows pas à pas
+
+Sous Windows, on compile avec **MSYS2**, qui fournit `gcc`, `make` et SDL2
+dans un terminal de type Linux. Tout se fait dans le terminal
+**MSYS2 UCRT64**.
+
+1. **Installer MSYS2** : télécharger l'installeur sur <https://www.msys2.org>
+   et le lancer (dossier par défaut `C:\msys64`).
+2. **Ouvrir le bon terminal** : menu Démarrer → **MSYS2 UCRT64** (icône
+   jaune). Pas « MSYS2 MSYS » ni « MINGW64 » : les paquets ci-dessous sont
+   ceux de UCRT64, ils ne seraient pas trouvés ailleurs.
+3. **Mettre MSYS2 à jour** :
+
+   ```bash
+   pacman -Syu
+   ```
+
+   Si la fenêtre se ferme toute seule, la rouvrir (MSYS2 UCRT64) et relancer
+   `pacman -Syu` jusqu'à ce qu'il n'y ait plus rien à faire.
+4. **Installer les dépendances** (une seule commande, répondre `O`/Entrée) :
+
+   ```bash
+   pacman -S --needed git make \
+       mingw-w64-ucrt-x86_64-gcc \
+       mingw-w64-ucrt-x86_64-pkgconf \
+       mingw-w64-ucrt-x86_64-SDL2 \
+       mingw-w64-ucrt-x86_64-SDL2_ttf
+   ```
+
+   | Paquet                              | Rôle                                         |
+   |-------------------------------------|----------------------------------------------|
+   | `git`                               | récupérer le projet                          |
+   | `make`                              | lancer la compilation (`Makefile`)           |
+   | `mingw-w64-ucrt-x86_64-gcc`         | le compilateur C pour Windows                |
+   | `mingw-w64-ucrt-x86_64-pkgconf`     | `pkg-config` : trouve SDL2 pour le Makefile  |
+   | `mingw-w64-ucrt-x86_64-SDL2`        | fenêtre, clavier, souris, dessin             |
+   | `mingw-w64-ucrt-x86_64-SDL2_ttf`    | affichage du texte (polices TrueType)        |
+
+   Le réseau du duel en ligne utilise Winsock, fourni avec Windows : rien à
+   installer de plus (le Makefile ajoute `-lws2_32 -liphlpapi` tout seul).
+5. **Vérifier** que tout est en place :
+
+   ```bash
+   gcc --version                 # doit afficher « gcc.exe (Rev..., Built by MSYS2 project) »
+   pkg-config --modversion sdl2  # doit afficher une version (2.x.x)
+   ```
+
+   Si `pkg-config` ne trouve pas `sdl2`, c'est presque toujours que le
+   terminal n'est pas **UCRT64**.
+6. **Récupérer et compiler** (le disque `C:` s'appelle `/c` dans MSYS2) :
+
+   ```bash
+   cd /c/Users/$USERNAME/Documents
+   git clone https://github.com/evomerse/duckgeon.git
+   cd duckgeon
+   make
+   ```
+
+   On obtient `duckgeon.exe` (graphique) et `donjon.exe` (console).
+7. **Lancer**, depuis ce même terminal :
+
+   ```bash
+   ./duckgeon.exe
+   ./donjon.exe
+   ```
+
+8. **Lancer par double-clic** (facultatif) : hors du terminal, Windows ne
+   trouve pas les DLL de SDL2. Les copier une fois à côté du jeu :
+
+   ```bash
+   ldd duckgeon.exe | grep -i ucrt64 | awk '{print $3}' | xargs -I{} cp {} .
+   ```
+
+   Pour donner le jeu à un ami, il suffit alors de lui envoyer le dossier
+   (`duckgeon.exe` + les `.dll`).
+
+**Pare-feu Windows** : au premier clic sur *Héberger* (duel en ligne),
+Windows demande d'autoriser Duckgeon : cocher **Réseaux privés** et valider.
+Si la question a été refusée, autoriser le port à la main (PowerShell en
+administrateur) :
+
+```powershell
+New-NetFirewallRule -DisplayName "Duckgeon" -Direction Inbound -Protocol TCP -LocalPort 5050 -Action Allow
 ```
 
 **Police** : Duckgeon cherche une police installée (Montserrat, DejaVu,
@@ -106,7 +191,7 @@ Liberation, Arial). Si aucune n'est trouvée, placez un fichier
 | **Combat**               | Tour par tour, voir ci-dessous                                                   |
 | **Boutique**             | Acheter des cosmétiques avec le foie gras, les essayer et les équiper            |
 | **Bestiaire**            | Fiche de chaque monstre (stats à chaque étage, attaques, éléments) et table des éléments |
-| **Duel en ligne**        | 1 contre 1 entre deux PC : héberger (son IP s'affiche) ou rejoindre en tapant l'IP de l'hôte |
+| **Duel en ligne**        | 1 contre 1 à 4 contre 4 entre deux PC, niveau libre ou imposé : héberger (son IP s'affiche) ou rejoindre en tapant l'IP de l'hôte |
 
 ### Le combat
 
@@ -139,7 +224,9 @@ Le combat s'inspire de *Honkai: Star Rail* :
 
 **Duel local** : deux joueurs sur le même PC, chacun son tour, de 1 contre 1
 à 4 contre 4 (écran « Préparer le combat », mode duel). Les héros sont
-copiés à PV pleins : aucune conséquence sur le donjon.
+copiés à PV pleins : aucune conséquence sur le donjon. Le sélecteur
+**Niveau** permet de garder les niveaux actuels ou de mettre tous les héros
+au même niveau (1, 2, 3...) pour un duel équilibré.
 
 Pour jouer à deux sur **deux PC différents**, voir
 [Duel en ligne](#duel-en-ligne-deux-pc).
@@ -253,15 +340,22 @@ Avant l'achat, il y est affiché avec un cadenas.
 
 ## Duel en ligne (deux PC)
 
-Un 1 contre 1 entre deux joueurs, chacun sur son PC, avec ses propres héros.
+Un duel de **1 contre 1 à 4 contre 4** entre deux joueurs, chacun sur son PC
+(Linux, macOS ou Windows, mélangés sans problème), avec ses propres héros.
 Bouton **Duel en ligne (IP)** de l'écran titre.
 
 ### Lancer une partie
 
-1. Les deux joueurs ouvrent **Duel en ligne (IP)** et choisissent leur héros
-   (flèches sous l'aperçu).
-2. Le premier clique sur **Héberger** : ses adresses IP s'affichent, avec le
-   port **5050**. Il les donne à l'autre joueur.
+1. Les deux joueurs ouvrent **Duel en ligne (IP)** et composent leur équipe :
+   un clic sur un héros de la liste l'ajoute, un clic sur un emplacement le
+   retire.
+2. Le premier choisit le **format** puis clique sur **Héberger** :
+   - **Héros par équipe** : de 1 contre 1 à 4 contre 4 ;
+   - **Niveau des héros** : *Niveaux actuels* (chacun joue ses héros tels
+     qu'ils sont) ou *Tous niveau 1, 2, 3...* jusqu'à 30.
+
+   Ses adresses IP s'affichent, avec le port **5050**. Il les donne à
+   l'autre joueur.
 3. L'autre tape l'adresse dans **Rejoindre une partie** puis
    **Se connecter** (ou Entrée).
 4. Le duel démarre sur les deux écrans. L'hôte est le joueur 1 (à gauche).
@@ -270,8 +364,18 @@ Bouton **Duel en ligne (IP)** de l'écran titre.
 5. À la fin, **Revanche** relance un duel chez les deux joueurs ; **Quitter**
    ou **Abandon** prévient l'autre (*Duel interrompu*).
 
-Le duel est amical : les héros sont copiés à PV pleins, rien n'est modifié
-dans la sauvegarde.
+C'est l'**hôte qui fixe le format** : l'invité joue ses premiers héros
+choisis, et si son équipe est trop petite elle est complétée par ses autres
+héros. Le duel est amical : les héros sont copiés à PV pleins, rien n'est
+modifié dans la sauvegarde.
+
+**Niveau imposé** (pour éviter les écarts énormes entre un héros niveau 2 et
+un niveau 25) : chaque héros prend les statistiques de **sa classe à ce
+niveau** (mêmes gains qu'une vraie montée de niveau), sans arme ni points de
+stats dépensés. Il garde son nom, sa classe, son élément et son apparence :
+seule la façon de jouer fait la différence. Le même réglage existe pour le
+**duel local** (écran « Préparer le combat », mode duel, sélecteur
+*Niveau*).
 
 ### Vous êtes au même endroit (même Wi-Fi)
 
@@ -285,6 +389,9 @@ sudo firewall-cmd --add-port=5050/tcp
 # Ubuntu (ufw)
 sudo ufw allow 5050/tcp
 ```
+
+Sous Windows, accepter la fenêtre du pare-feu au premier *Héberger* (voir
+[Windows pas à pas](#windows-pas-à-pas)).
 
 ### Vous n'êtes pas au même endroit : Tailscale
 
@@ -329,8 +436,9 @@ chacun le même combat**, et ne s'échangent que les décisions des joueurs.
    Hôte (joueur 1)                              Invité (joueur 2)
    ───────────────                              ─────────────────
    Héberger : écoute le port 5050  ◄──── TCP ─── Se connecter à l'IP
-   BONJOUR (son héros + graine)   ────────────►
-                                  ◄──────────── BONJOUR (son héros)
+   BONJOUR (format + graine       ────────────►  lit le format, prépare
+            + son équipe)                       son équipe selon ce format
+                                  ◄──────────── BONJOUR (son équipe)
    combat(J1, J2, graine)                       combat(J1, J2, graine)
    son tour : joue « Q sur J2 »
    ACTION (tour, lanceur, action, cible, empreinte) ──►  rejoue la même action
@@ -339,8 +447,9 @@ chacun le même combat**, et ne s'échangent que les décisions des joueurs.
    REVANCHE (manche n) / QUITTER  ◄──────────►  dans les deux sens
 ```
 
-- **Connexion** (`src/reseau.c`) : sockets TCP POSIX en mode **non
-  bloquant**, lus à chaque image (`reseauMaj`) : la fenêtre ne se fige
+- **Connexion** (`src/reseau.c`) : sockets TCP en mode **non bloquant**,
+  POSIX sous Linux/macOS et Winsock sous Windows (les quelques différences
+  sont regroupées en tête du fichier), lus à chaque image (`reseauMaj`) : la fenêtre ne se fige
   jamais pendant l'attente. Une connexion sans réponse est abandonnée après
   10 secondes.
 - **Messages** : 2 octets de longueur, 1 octet de type, puis les données.
@@ -355,9 +464,10 @@ chacun le même combat**, et ne s'échangent que les décisions des joueurs.
   exactement pareil sur les deux PC (principe du *lockstep*, utilisé par
   beaucoup de jeux de stratégie). Les particules de l'affichage gardent
   `rand()` : elles ne touchent pas au combat.
-- **Mêmes héros** : chacun utilise pour lui-même la copie « telle que
-  l'autre la recevra » (`reseauPreparerHeros`), pour partir de données
-  identiques au bit près.
+- **Mêmes héros** : chacun prépare son équipe (niveau imposé compris,
+  `imposerNiveau`) puis utilise pour lui-même la copie « telle que l'autre la
+  recevra » (`reseauPreparerHeros`), pour partir de données identiques au
+  bit près.
 - **Contrôle** : chaque action porte le numéro du tour et une **empreinte**
   de l'état (PV, énergie, boucliers, points de compétence). Si elle ne
   correspond pas à l'état local, le duel s'arrête avec un message de

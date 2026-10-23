@@ -35,6 +35,7 @@ typedef struct {
     int choisis[2][COMBAT_MAX_ALLIES]; /**< Indices des héros de chaque équipe */
     int nb[2];
     int equipeEditee;               /**< Duel : équipe qui reçoit le héros  */
+    int niveauDuel;                 /**< Duel : 0 = niveaux actuels, sinon niveau imposé */
     int etage;
     int defilement;                 /**< Défilement des héros disponibles   */
 } Preparation;
@@ -42,16 +43,20 @@ typedef struct {
 /** Duel en ligne : connexion et héros des deux joueurs. */
 typedef struct {
     Reseau net;
-    int heros;              /**< Indice de notre héros dans le donjon      */
+    int choisis[COMBAT_MAX_ALLIES]; /**< Nos héros (indices dans le donjon) */
+    int nbChoisis;
+    int defilement;         /**< Défilement de la liste des héros         */
+    FormatDuel format;      /**< Taille des équipes, niveau, graine (hôte) */
     char adresse[64];       /**< IP tapée pour rejoindre                  */
     int saisieAdresse;      /**< 1 si le champ de l'IP a le focus         */
     char ips[160];          /**< Nos adresses à donner à l'autre joueur   */
-    int bonjourEnvoye;      /**< Notre héros est parti                    */
-    int bonjourRecu;        /**< Le héros de l'adversaire est arrivé      */
-    unsigned graine;        /**< Hasard du duel, choisi par l'hôte        */
+    int bonjourEnvoye;      /**< Notre équipe est partie                  */
+    int bonjourRecu;        /**< L'équipe de l'adversaire est arrivée     */
     int manche;             /**< Numéro du duel (revanches)               */
-    Personnage moi;         /**< Copies envoyées / reçues                  */
-    Personnage adversaire;
+    Personnage moi[COMBAT_MAX_ALLIES];        /**< Copies envoyées        */
+    int nbMoi;
+    Personnage adversaire[COMBAT_MAX_ALLIES]; /**< Copies reçues          */
+    int nbAdversaire;
 } EnLigne;
 
 typedef struct CombatGui CombatGui; /* défini dans gui_combat.c */
@@ -93,6 +98,12 @@ void ecranHeros(App *app);
 void ecranEditeur(App *app);
 void ecranPreparation(App *app);
 
+/** Carte compacte d'un héros (portrait, nom, classe) ; 1 si cliquée. */
+int carteHeros(Gui *g, const Personnage *p, float x, float y, float w, float h, int choisie, int active);
+
+/** Libellé du niveau d'un duel : « Niveaux actuels » ou « Niveau 5 ». */
+void libelleNiveauDuel(int niveau, char *buf, int taille);
+
 /** Pour le duel : 1 si `i` est dans l'équipe `equipe` (0 ou 1). */
 int dansEquipePrep(const Preparation *prep, int equipe, int i);
 void ecranCombat(App *app);
@@ -113,8 +124,8 @@ void ouvrirEditeur(App *app, int index);
 
 /** Crée l'état graphique d'un combat (NULL si impossible). */
 CombatGui *combatGuiCreer(App *app);
-/** Crée le duel en ligne entre app->enLigne.moi et .adversaire (l'hôte est
- *  le joueur 1), pour la manche app->enLigne.manche. */
+/** Crée le duel en ligne entre les équipes app->enLigne.moi et
+ *  .adversaire (l'hôte est le joueur 1), pour la manche app->enLigne.manche. */
 CombatGui *combatGuiCreerEnLigne(App *app);
 /** Libère l'état graphique du combat. */
 void combatGuiDetruire(CombatGui *cg);

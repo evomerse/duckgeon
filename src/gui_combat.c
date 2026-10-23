@@ -529,8 +529,26 @@ CombatGui *combatGuiCreer(App *app)
         equipe2[n2++] = &app->donjon.elements[prep->choisis[1][k]];
     }
     cg->etage = prep->etage;
-    int ok = prep->mode == MODE_DUEL ? combatInitDuel(&cg->cb, cg->equipe, n, equipe2, n2)
-                                     : combatInit(&cg->cb, cg->equipe, n, cg->etage);
+    int ok;
+    if (prep->mode == MODE_DUEL) {
+        /* niveau imposé : on travaille sur des copies (le duel recopie
+         * encore les héros, le donjon n'est jamais modifié) */
+        Personnage copies[2][COMBAT_MAX_ALLIES];
+        Personnage *eq1[COMBAT_MAX_ALLIES], *eq2[COMBAT_MAX_ALLIES];
+        for (int k = 0; k < n; k++) {
+            copies[0][k] = *cg->equipe[k];
+            imposerNiveau(&copies[0][k], prep->niveauDuel);
+            eq1[k] = &copies[0][k];
+        }
+        for (int k = 0; k < n2; k++) {
+            copies[1][k] = *equipe2[k];
+            imposerNiveau(&copies[1][k], prep->niveauDuel);
+            eq2[k] = &copies[1][k];
+        }
+        ok = combatInitDuel(&cg->cb, eq1, n, eq2, n2);
+    } else {
+        ok = combatInit(&cg->cb, cg->equipe, n, cg->etage);
+    }
     if (!ok) {
         free(cg);
         return NULL;
@@ -548,20 +566,22 @@ CombatGui *combatGuiCreerEnLigne(App *app)
     }
     /* L'hôte est le joueur 1 (camp 0) sur les deux machines. */
     int hote = el->net.hote;
-    Personnage *j1 = hote ? &el->moi : &el->adversaire;
-    Personnage *j2 = hote ? &el->adversaire : &el->moi;
+    Personnage *moi[COMBAT_MAX_ALLIES], *adv[COMBAT_MAX_ALLIES];
+    for (int k = 0; k < el->nbMoi; k++) moi[k] = &el->moi[k];
+    for (int k = 0; k < el->nbAdversaire; k++) adv[k] = &el->adversaire[k];
+    int n1 = hote ? el->nbMoi : el->nbAdversaire, n2 = hote ? el->nbAdversaire : el->nbMoi;
     cg->etage = 1;
-    if (!combatInitDuel(&cg->cb, &j1, 1, &j2, 1)) {
+    if (!combatInitDuel(&cg->cb, hote ? moi : adv, n1, hote ? adv : moi, n2)) {
         free(cg);
         return NULL;
     }
     /* même graine des deux côtés, différente à chaque revanche */
-    combatGraine(&cg->cb, el->graine ^ ((unsigned)el->manche * 2654435761u));
+    combatGraine(&cg->cb, el->format.graine ^ ((unsigned)el->manche * 2654435761u));
     cg->enLigne = 1;
     cg->monCamp = hote ? 0 : 1;
     cg->manche = el->manche;
     cg->net = &el->net;
-    return preparerScene(cg, 1, 1);
+    return preparerScene(cg, n1, n2);
 }
 
 /** Fin commune de la création : état affiché, bannière, premier tour. */
@@ -577,7 +597,7 @@ static CombatGui *preparerScene(CombatGui *cg, int n, int n2)
     cg->cible = -1;
     char titre[48];
     if (cg->enLigne) {
-        snprintf(titre, sizeof titre, "Duel en ligne");
+        snprintf(titre, sizeof titre, "Duel en ligne - %d contre %d", n, n2);
         cg->dernierCamp = -1; /* annonce « à vous » ou « adversaire » */
     } else if (cg->cb.mode == MODE_DUEL) {
         snprintf(titre, sizeof titre, "Duel - %d contre %d", n, n2);

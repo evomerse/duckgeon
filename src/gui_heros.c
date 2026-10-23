@@ -38,7 +38,7 @@ static void dessinerMessage(Gui *g)
 }
 
 /** Carte compacte d'un héros ; retourne 1 si elle est cliquée. */
-static int carteHeros(Gui *g, const Personnage *p, float x, float y, float w, float h,
+int carteHeros(Gui *g, const Personnage *p, float x, float y, float w, float h,
                       int choisie, int active)
 {
     float t = g->temps / 1000.0f;
@@ -318,6 +318,15 @@ static int positionDans(const Preparation *prep, int equipe, int i)
     return -1;
 }
 
+void libelleNiveauDuel(int niveau, char *buf, int taille)
+{
+    if (niveau <= 0) {
+        snprintf(buf, (size_t)taille, "Niveaux actuels");
+    } else {
+        snprintf(buf, (size_t)taille, "Tous niveau %d", niveau);
+    }
+}
+
 int dansEquipePrep(const Preparation *prep, int equipe, int i)
 {
     return positionDans(prep, equipe, i) >= 0;
@@ -371,7 +380,8 @@ static int emplacement(App *app, int equipe, int k, float x, float y, float w, f
     dessinerHeros(g, p, x + w / 2, sol, echelle, &pose);
     texte(g, POLICE_NORMALE, p->nom, x + w / 2, sol + 8, COUL_TEXTE, ALIGN_CENTRE);
     char info[48];
-    snprintf(info, sizeof info, "Niv %d %s", p->niveau, libelleClasse(p->classe));
+    int niveau = (prep->mode == MODE_DUEL && prep->niveauDuel > 0) ? prep->niveauDuel : p->niveau;
+    snprintf(info, sizeof info, "Niv %d %s", niveau, libelleClasse(p->classe));
     texte(g, POLICE_PETITE, info, x + w / 2, sol + 27, couleurClasse(p->classe), ALIGN_CENTRE);
     return zoneClic(g, x, y, w, h);
 }
@@ -455,6 +465,16 @@ void ecranPreparation(App *app)
     if (prep->taille > COMBAT_MAX_ALLIES) prep->taille = COMBAT_MAX_ALLIES;
     duel = prep->mode == MODE_DUEL;
 
+    /* duel : niveaux actuels, ou tous les héros ramenés au même niveau */
+    if (duel) {
+        texte(g, POLICE_NORMALE, "Niveau", 950, 110, COUL_OR, ALIGN_GAUCHE);
+        char niv[32];
+        libelleNiveauDuel(prep->niveauDuel, niv, sizeof niv);
+        prep->niveauDuel += selecteur(g, 1020, 105, 230, niv);
+        if (prep->niveauDuel < 0) prep->niveauDuel = NIVEAU_DUEL_MAX;
+        if (prep->niveauDuel > NIVEAU_DUEL_MAX) prep->niveauDuel = 0;
+    }
+
     /* les équipes ne gardent que des héros existants (vivants hors duel) */
     for (int e = 0; e < 2; e++) {
         for (int k = prep->nb[e] - 1; k >= 0; k--) {
@@ -516,7 +536,9 @@ void ecranPreparation(App *app)
         }
         texteOmbre(g, POLICE_GRANDE, "VS", LARGEUR / 2.0f, 262, COUL_OR_CLAIR, ALIGN_CENTRE);
         pret = prep->nb[0] == prep->taille && prep->nb[1] == prep->taille;
-        texte(g, POLICE_PETITE, "Duel amical : PV complets, sans XP ni K.O. durable. Un même héros peut jouer des deux côtés.",
+        texte(g, POLICE_PETITE, prep->niveauDuel > 0
+                  ? "Niveau imposé : stats de la classe à ce niveau, sans arme ni points bonus. Duel amical, sans XP."
+                  : "Duel amical : PV complets, sans XP ni K.O. durable. Un même héros peut jouer des deux côtés.",
               LARGEUR / 2.0f, 386, COUL_TEXTE_DOUX, ALIGN_CENTRE);
         if (bouton(g, LARGEUR / 2.0f - 200, 404, 400, 40, pret ? "Lancer le duel !" : "Équipes incomplètes",
                    BOUTON_PRINCIPAL, pret) || (pret && guiTouche(g, SDLK_RETURN))) {

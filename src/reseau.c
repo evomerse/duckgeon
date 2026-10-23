@@ -1,36 +1,110 @@
 /**
  * @file reseau.c
- * @brief Connexion TCP du duel en ligne (sockets POSIX, non bloquants).
+ * @brief Connexion TCP du duel en ligne (sockets non bloquants).
  *
  * Format d'un message : 2 octets de longueur (taille de la suite), 1 octet
  * de type, puis les données. Les entiers sont écrits octet par octet
- * (gros-boutiste) et le héros champ par champ : le format ne dépend ni du
- * compilateur ni de la machine.
+ * (gros-boutiste) et les héros champ par champ : le format ne dépend ni du
+ * compilateur ni de la machine (un PC Windows peut jouer contre un Linux).
+ *
+ * Les sockets de Windows (Winsock) et de Linux/macOS (POSIX) s'utilisent
+ * presque pareil ; les quelques différences sont regroupées juste en
+ * dessous (fermeture, mode non bloquant, codes d'erreur, adresses locales).
  */
-#define _POSIX_C_SOURCE 200809L
-#define _DEFAULT_SOURCE /* getifaddrs, IFF_LOOPBACK */
+#ifdef _WIN32
+#  ifndef _WIN32_WINNT
+#    define _WIN32_WINNT 0x0600 /* Vista et plus : inet_ntop */
+#  endif
+#  include <winsock2.h>
+#  include <ws2tcpip.h>
+#  include <iphlpapi.h>
+#  include <wchar.h>
+#  include <stdlib.h>
+typedef SOCKET Sock;
+#  define SOCK_INVALIDE   INVALID_SOCKET
+#  define fermerSock      closesocket
+#  define derniereErreur  WSAGetLastError
+#  define ERR_EN_COURS(e) ((e) == WSAEWOULDBLOCK || (e) == WSAEINPROGRESS)
+#  define ERR_ATTENDRE(e) ((e) == WSAEWOULDBLOCK || (e) == WSAEINTR)
+#  define ERR_REFUSEE     WSAECONNREFUSED
+#  define SANS_SIGNAL     0
+#else
+#  define _POSIX_C_SOURCE 200809L
+#  define _DEFAULT_SOURCE /* getifaddrs, IFF_LOOPBACK */
+#  include <errno.h>
+#  include <fcntl.h>
+#  include <ifaddrs.h>
+#  include <net/if.h>
+#  include <netdb.h>
+#  include <netinet/in.h>
+#  include <netinet/tcp.h>
+#  include <sys/select.h>
+#  include <sys/socket.h>
+#  include <unistd.h>
+#  include <arpa/inet.h>
+typedef int Sock;
+#  define SOCK_INVALIDE   (-1)
+#  define fermerSock      close
+#  define derniereErreur() errno
+#  define ERR_EN_COURS(e) ((e) == EINPROGRESS)
+#  define ERR_ATTENDRE(e) ((e) == EAGAIN || (e) == EWOULDBLOCK || (e) == EINTR)
+#  define ERR_REFUSEE     ECONNREFUSED
+#  ifdef MSG_NOSIGNAL
+#    define SANS_SIGNAL   MSG_NOSIGNAL /* pas de SIGPIPE si l'autre est parti */
+#  else
+#    define SANS_SIGNAL   0
+#  endif
+#endif
 
-#include <errno.h>
-#include <fcntl.h>
-#include <ifaddrs.h>
-#include <net/if.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
-#include <poll.h>
 #include <stdio.h>
 #include <string.h>
-#include <sys/socket.h>
 #include <time.h>
-#include <unistd.h>
-#include <arpa/inet.h>
 
 #include "reseau.h"
 
-#define VERSION_PROTOCOLE 1
+#define VERSION_PROTOCOLE 2
 #define DELAI_CONNEXION   10 /* secondes avant d'abandonner une connexion */
 
 static time_t debutConnexion;
+
+/** Windows : Winsock doit être démarré une fois avant tout appel réseau. */
+static int demarrerSockets(void)
+{
+#ifdef _WIN32
+    static int demarre = 0;
+    if (!demarre) {
+        WSADATA donnees;
+        if (WSAStartup(MAKEWORD(2, 2), &donnees) != 0) return 0;
+        demarre = 1;
+    }
+#endif
+    return 1;
+}
+
+static int nonBloquant(Sock s)
+{
+#ifdef _WIN32
+    u_long oui = 1;
+    return ioctlsocket(s, FIONBIO, &oui) == 0;
+#else
+    int f = fcntl(s, F_GETFL, 0);
+    return f >= 0 && fcntl(s, F_SETFL, f | O_NONBLOCK) == 0;
+#endif
+}
+
+/** Attend au plus `ms` millisecondes que la socket soit prête en écriture.
+ *  @return 1 si prête, -1 en cas d'erreur signalée, 0 sinon. */
+static int pretEcriture(Sock s, int ms)
+{
+    fd_set ecr, exc;
+    FD_ZERO(&ecr);
+    FD_ZERO(&exc);
+    FD_SET(s, &ecr);
+    FD_SET(s, &exc); /* Windows signale un échec de connexion ici */
+    struct timeval delai = { ms / 1000, (ms % 1000) * 1000 };
+    if (select((int)s + 1, NULL, &ecr, &exc, &delai) <= 0) return 0;
+    return FD_ISSET(s, &exc) ? -1 : 1;
+}
 
 /* ------------------------------------------------------------------ */
 /*  Écriture / lecture des données                                    */
@@ -38,7 +112,7 @@ static time_t debutConnexion;
 
 /** Tampon d'écriture d'un message. */
 typedef struct {
-    unsigned char o[512];
+    unsigned char o[1024];
     int n;
 } Ecriture;
 
@@ -164,37 +238,36 @@ void reseauInit(Reseau *r)
     r->etat = RESEAU_INACTIF;
 }
 
+/** Ferme les sockets ouvertes (sans toucher à la file des messages). */
+static void fermerSockets(Reseau *r)
+{
+    if (r->sock != -1) fermerSock((Sock)r->sock);
+    if (r->ecoute != -1) fermerSock((Sock)r->ecoute);
+    r->sock = r->ecoute = -1;
+}
+
 void reseauFermer(Reseau *r)
 {
-    if (r->sock >= 0) close(r->sock);
-    if (r->ecoute >= 0) close(r->ecoute);
+    fermerSockets(r);
     reseauInit(r);
 }
 
-/** Passe en erreur (et ferme les sockets) avec un message lisible. Les
- *  messages déjà reçus restent dans la file (« je quitte » juste avant la
- *  fermeture, par exemple). */
+/** Passe en erreur avec un message lisible. Les messages déjà reçus
+ *  restent dans la file (« je quitte » juste avant la fermeture...). */
 static void echec(Reseau *r, const char *raison)
 {
-    if (r->sock >= 0) close(r->sock);
-    if (r->ecoute >= 0) close(r->ecoute);
-    r->sock = r->ecoute = -1;
+    fermerSockets(r);
     r->nbRecu = 0;
     snprintf(r->erreur, sizeof r->erreur, "%s", raison);
     r->etat = RESEAU_ERREUR;
 }
 
-static int nonBloquant(int s)
-{
-    int f = fcntl(s, F_GETFL, 0);
-    return f >= 0 && fcntl(s, F_SETFL, f | O_NONBLOCK) == 0;
-}
-
 /** Réglages de la socket reliée à l'autre joueur. */
-static void reglerSocket(int s)
+static void reglerSocket(Sock s)
 {
     int un = 1;
-    setsockopt(s, IPPROTO_TCP, TCP_NODELAY, &un, sizeof un); /* pas d'attente pour les petits messages */
+    /* pas d'attente pour regrouper les petits messages */
+    setsockopt(s, IPPROTO_TCP, TCP_NODELAY, (const char *)&un, sizeof un);
     nonBloquant(s);
 }
 
@@ -202,26 +275,32 @@ int reseauHeberger(Reseau *r)
 {
     reseauFermer(r);
     r->hote = 1;
-    int s = socket(AF_INET, SOCK_STREAM, 0);
-    if (s < 0) {
+    if (!demarrerSockets()) {
+        echec(r, "Le réseau n'est pas disponible.");
+        return 0;
+    }
+    Sock s = socket(AF_INET, SOCK_STREAM, 0);
+    if (s == SOCK_INVALIDE) {
         echec(r, "Impossible de créer la connexion.");
         return 0;
     }
-    int un = 1;
-    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, &un, sizeof un);
+#ifndef _WIN32
+    int un = 1; /* relancer tout de suite après une partie */
+    setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char *)&un, sizeof un);
+#endif
     struct sockaddr_in adr;
     memset(&adr, 0, sizeof adr);
     adr.sin_family = AF_INET;
     adr.sin_addr.s_addr = htonl(INADDR_ANY);
     adr.sin_port = htons(RESEAU_PORT);
-    if (bind(s, (struct sockaddr *)&adr, sizeof adr) < 0 || listen(s, 1) < 0 || !nonBloquant(s)) {
-        close(s);
+    if (bind(s, (struct sockaddr *)&adr, sizeof adr) != 0 || listen(s, 1) != 0 || !nonBloquant(s)) {
+        fermerSock(s);
         char msg[96];
         snprintf(msg, sizeof msg, "Le port %d est déjà utilisé.", RESEAU_PORT);
         echec(r, msg);
         return 0;
     }
-    r->ecoute = s;
+    r->ecoute = (intptr_t)s;
     r->etat = RESEAU_ATTENTE;
     return 1;
 }
@@ -230,6 +309,10 @@ int reseauRejoindre(Reseau *r, const char *adresse)
 {
     reseauFermer(r);
     r->hote = 0;
+    if (!demarrerSockets()) {
+        echec(r, "Le réseau n'est pas disponible.");
+        return 0;
+    }
 
     /* « ip » ou « ip:port » (espaces ignorés) */
     char hote[64];
@@ -258,21 +341,22 @@ int reseauRejoindre(Reseau *r, const char *adresse)
         echec(r, "Adresse invalide.");
         return 0;
     }
-    int s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
-    if (s < 0 || !nonBloquant(s)) {
-        if (s >= 0) close(s);
+    Sock s = socket(res->ai_family, res->ai_socktype, res->ai_protocol);
+    if (s == SOCK_INVALIDE || !nonBloquant(s)) {
+        if (s != SOCK_INVALIDE) fermerSock(s);
         freeaddrinfo(res);
         echec(r, "Impossible de créer la connexion.");
         return 0;
     }
-    int rc = connect(s, res->ai_addr, res->ai_addrlen);
+    int rc = connect(s, res->ai_addr, (int)res->ai_addrlen);
+    int err = derniereErreur();
     freeaddrinfo(res);
-    if (rc < 0 && errno != EINPROGRESS) {
-        close(s);
+    if (rc != 0 && !ERR_EN_COURS(err)) {
+        fermerSock(s);
         echec(r, "Connexion refusée.");
         return 0;
     }
-    r->sock = s;
+    r->sock = (intptr_t)s;
     r->etat = RESEAU_CONNEXION;
     debutConnexion = time(NULL);
     return 1;
@@ -305,8 +389,11 @@ static void decouper(Reseau *r)
                 echec(r, "L'autre joueur n'a pas la même version du jeu.");
                 return;
             }
-            m.graine = lireEntier(&l);
-            lireHeros(&l, &m.heros);
+            m.format.graine = lireEntier(&l);
+            m.format.taille = borner(lireOctet(&l), 1, RESEAU_HEROS_MAX);
+            m.format.niveau = borner(lireOctet(&l), 0, 255);
+            m.nbHeros = borner(lireOctet(&l), 1, RESEAU_HEROS_MAX);
+            for (int k = 0; k < m.nbHeros; k++) lireHeros(&l, &m.heros[k]);
             break;
         case MSG_ACTION:
             m.manche = (int)lireEntier(&l);
@@ -335,29 +422,30 @@ static void decouper(Reseau *r)
 void reseauMaj(Reseau *r)
 {
     if (r->etat == RESEAU_ATTENTE) {
-        int s = accept(r->ecoute, NULL, NULL);
-        if (s >= 0) {
+        Sock s = accept((Sock)r->ecoute, NULL, NULL);
+        if (s != SOCK_INVALIDE) {
             reglerSocket(s);
-            close(r->ecoute); /* un seul adversaire */
+            fermerSock((Sock)r->ecoute); /* un seul adversaire */
             r->ecoute = -1;
-            r->sock = s;
+            r->sock = (intptr_t)s;
             r->etat = RESEAU_CONNECTE;
         }
         return;
     }
 
     if (r->etat == RESEAU_CONNEXION) {
-        struct pollfd pf = { r->sock, POLLOUT, 0 };
-        if (poll(&pf, 1, 0) > 0) {
+        Sock s = (Sock)r->sock;
+        int pret = pretEcriture(s, 0);
+        if (pret != 0) {
             int err = 0;
             socklen_t lg = sizeof err;
-            getsockopt(r->sock, SOL_SOCKET, SO_ERROR, &err, &lg);
-            if (err != 0) {
-                echec(r, err == ECONNREFUSED ? "Personne n'héberge à cette adresse."
-                                             : "Impossible de joindre cette adresse.");
+            getsockopt(s, SOL_SOCKET, SO_ERROR, (char *)&err, &lg);
+            if (pret < 0 || err != 0) {
+                echec(r, err == ERR_REFUSEE ? "Personne n'héberge à cette adresse."
+                                            : "Impossible de joindre cette adresse.");
                 return;
             }
-            reglerSocket(r->sock);
+            reglerSocket(s);
             r->etat = RESEAU_CONNECTE;
         } else if (time(NULL) - debutConnexion > DELAI_CONNEXION) {
             echec(r, "Pas de réponse (adresse ou pare-feu ?).");
@@ -371,16 +459,16 @@ void reseauMaj(Reseau *r)
             echec(r, "Message invalide reçu.");
             return;
         }
-        ssize_t n = recv(r->sock, r->recu + r->nbRecu, (size_t)(RESEAU_TAMPON - r->nbRecu), 0);
+        int n = (int)recv((Sock)r->sock, (char *)r->recu + r->nbRecu, RESEAU_TAMPON - r->nbRecu, 0);
         if (n > 0) {
-            r->nbRecu += (int)n;
+            r->nbRecu += n;
             decouper(r);
             if (r->etat != RESEAU_CONNECTE) return;
         } else if (n == 0) {
             echec(r, "L'adversaire s'est déconnecté.");
             return;
         } else {
-            if (errno != EAGAIN && errno != EWOULDBLOCK && errno != EINTR) {
+            if (!ERR_ATTENDRE(derniereErreur())) {
                 echec(r, "La connexion a été coupée.");
             }
             return;
@@ -413,32 +501,35 @@ static int envoyer(Reseau *r, const Ecriture *e)
     trame[0] = (unsigned char)(e->n >> 8);
     trame[1] = (unsigned char)(e->n & 0xFF);
     memcpy(trame + 2, e->o, (size_t)e->n);
-    int total = e->n + 2, fait = 0;
+    int total = e->n + 2, fait = 0, essais = 0;
     while (fait < total) {
-        ssize_t n = send(r->sock, trame + fait, (size_t)(total - fait), MSG_NOSIGNAL);
+        int n = (int)send((Sock)r->sock, (const char *)trame + fait, total - fait, SANS_SIGNAL);
         if (n < 0) {
-            if (errno == EINTR) continue;
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                struct pollfd pf = { r->sock, POLLOUT, 0 };
-                poll(&pf, 1, 200); /* tampon plein (très rare) : on patiente un peu */
+            /* tampon plein (très rare pour d'aussi petits messages) : on patiente un peu */
+            if (ERR_ATTENDRE(derniereErreur()) && essais++ < 10) {
+                pretEcriture((Sock)r->sock, 200);
                 continue;
             }
             echec(r, "La connexion a été coupée.");
             return 0;
         }
-        fait += (int)n;
+        fait += n;
     }
     return 1;
 }
 
-int reseauEnvoyerBonjour(Reseau *r, const Personnage *heros, unsigned graine)
+int reseauEnvoyerBonjour(Reseau *r, const Personnage heros[], int n, const FormatDuel *format)
 {
+    n = borner(n, 1, RESEAU_HEROS_MAX);
     Ecriture e = { .n = 0 };
     ecrireOctet(&e, MSG_BONJOUR);
     ecrireTexte(&e, "DUCK", 4);
     ecrireOctet(&e, VERSION_PROTOCOLE);
-    ecrireEntier(&e, graine);
-    ecrireHeros(&e, heros);
+    ecrireEntier(&e, format->graine);
+    ecrireOctet(&e, borner(format->taille, 1, RESEAU_HEROS_MAX));
+    ecrireOctet(&e, borner(format->niveau, 0, 255));
+    ecrireOctet(&e, n);
+    for (int k = 0; k < n; k++) ecrireHeros(&e, &heros[k]);
     return envoyer(r, &e);
 }
 
@@ -471,12 +562,48 @@ void reseauEnvoyerQuitter(Reseau *r)
     envoyer(r, &e);
 }
 
+/** Ajoute une adresse à la liste affichée. */
+static void ajouterAdresse(char *buf, int taille, const struct sockaddr_in *adr, int *n)
+{
+    char ip[INET_ADDRSTRLEN];
+    if (inet_ntop(AF_INET, (void *)&adr->sin_addr, ip, sizeof ip) == NULL) return;
+    size_t lg = strlen(buf);
+    snprintf(buf + lg, (size_t)taille - lg, "%s%s", *n > 0 ? "  ·  " : "", ip);
+    (*n)++;
+}
+
 int reseauAdressesLocales(char *buf, int taille)
 {
     buf[0] = '\0';
+    int n = 0;
+    if (!demarrerSockets()) return 0;
+#ifdef _WIN32
+    ULONG lg = 16 * 1024;
+    IP_ADAPTER_ADDRESSES *liste = malloc(lg);
+    if (liste == NULL) return 0;
+    ULONG options = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER;
+    if (GetAdaptersAddresses(AF_INET, options, NULL, liste, &lg) == ERROR_BUFFER_OVERFLOW) {
+        free(liste);
+        liste = malloc(lg);
+        if (liste == NULL || GetAdaptersAddresses(AF_INET, options, NULL, liste, &lg) != NO_ERROR) {
+            free(liste);
+            return 0;
+        }
+    }
+    for (IP_ADAPTER_ADDRESSES *a = liste; a != NULL; a = a->Next) {
+        if (a->OperStatus != IfOperStatusUp || a->IfType == IF_TYPE_SOFTWARE_LOOPBACK) continue;
+        /* cartes virtuelles de WSL / Hyper-V : inutiles pour l'autre joueur */
+        if (a->FriendlyName != NULL && wcsncmp(a->FriendlyName, L"vEthernet", 9) == 0) continue;
+        for (IP_ADAPTER_UNICAST_ADDRESS *u = a->FirstUnicastAddress; u != NULL; u = u->Next) {
+            if (u->Address.lpSockaddr->sa_family == AF_INET) {
+                ajouterAdresse(buf, taille, (const struct sockaddr_in *)u->Address.lpSockaddr, &n);
+            }
+        }
+    }
+    free(liste);
+#else
     struct ifaddrs *liste = NULL;
     if (getifaddrs(&liste) != 0) return 0;
-    int n = 0;
     for (struct ifaddrs *i = liste; i != NULL; i = i->ifa_next) {
         if (i->ifa_addr == NULL || i->ifa_addr->sa_family != AF_INET) continue;
         if ((i->ifa_flags & IFF_LOOPBACK) || !(i->ifa_flags & IFF_UP)) continue;
@@ -486,12 +613,9 @@ int reseauAdressesLocales(char *buf, int taille)
             || strncmp(nom, "virbr", 5) == 0) {
             continue;
         }
-        char ip[INET_ADDRSTRLEN];
-        inet_ntop(AF_INET, &((struct sockaddr_in *)i->ifa_addr)->sin_addr, ip, sizeof ip);
-        size_t lg = strlen(buf);
-        snprintf(buf + lg, (size_t)taille - lg, "%s%s", n > 0 ? "  ·  " : "", ip);
-        n++;
+        ajouterAdresse(buf, taille, (const struct sockaddr_in *)i->ifa_addr, &n);
     }
     freeifaddrs(liste);
+#endif
     return n;
 }
