@@ -110,6 +110,9 @@ static void ficheHeros(App *app, Personnage *p)
     if (!estVivant(p)) pose.alpha = 0.55f;
     dessinerHeros(g, p, sx, sy, 1.55f, &pose);
 
+    /* affinités de l'élément, au-dessus du sprite */
+    afficherAffinites(g, p->element, px + 22, py + 18, 1);
+
     if (bouton(g, px + 22, py + 438, 180, 40, "Personnaliser", BOUTON_NORMAL, 1)) {
         ouvrirEditeur(app, app->selection);
     }
@@ -158,24 +161,29 @@ static void ficheHeros(App *app, Personnage *p)
     snprintf(buf, sizeof buf, "%d", p->vit);
     stat(g, "Vitesse", buf, ix + 170, sy2 + 26);
 
-    /* capacités */
+    /* capacités (leur nom et leur effet dépendent de l'élément) */
     static const char *const TYPES[NB_ACTIONS] = { "BASIQUE", "COMPÉTENCE", "ULTIME" };
     float cy = py + 200;
     texte(g, POLICE_MOYENNE, "Capacités", ix, cy, COUL_OR, ALIGN_GAUCHE);
-    cy += 30;
+    cy += 28;
     for (int a = 0; a < NB_ACTIONS; a++) {
-        const Capacite *cap = capaciteClasse(p->classe, (enum TypeAction)a);
+        char nomCap[64];
+        nomCapacite(p, (enum TypeAction)a, nomCap, sizeof nomCap);
         texte(g, POLICE_PETITE, TYPES[a], ix, cy, avecAlpha(couleurClasse(p->classe), 220), ALIGN_GAUCHE);
-        texte(g, POLICE_NORMALE, cap->nom, ix + 112, cy - 2, COUL_TEXTE, ALIGN_GAUCHE);
+        texte(g, POLICE_NORMALE, nomCap, ix + 112, cy - 2, COUL_TEXTE, ALIGN_GAUCHE);
         cy += 20;
-        cy += texteBloc(g, POLICE_PETITE, cap->description, ix, cy, (int)(pw - 260), COUL_TEXTE_DOUX) + 8;
+        cy += texteBloc(g, POLICE_PETITE, capaciteClasse(p->classe, (enum TypeAction)a)->description,
+                        ix, cy, (int)(pw - 260), COUL_TEXTE_DOUX) + 4;
     }
+    snprintf(buf, sizeof buf, "Attaques %s · %s : %s", nomElement(p->element), nomEffetElement(p->element),
+             effetElement(p->element));
+    texteBloc(g, POLICE_PETITE, buf, ix, cy + 2, (int)(pw - 260), couleurElement(p->element));
 
     /* équipement et sac */
     cy = py + 430;
     texte(g, POLICE_MOYENNE, "Équipement", ix, cy, COUL_OR, ALIGN_GAUCHE);
     cy += 30;
-    texte(g, POLICE_PETITE, "clic : utiliser · clic droit : jeter", px + pw - 24, cy - 24,
+    texte(g, POLICE_PETITE, "clic : utiliser · droit : jeter", px + pw - 24, cy - 24,
           COUL_TEXTE_DOUX, ALIGN_DROITE);
     if (p->arme.nom[0] != '\0') {
         snprintf(buf, sizeof buf, "Arme : %s (+%d ATK)", p->arme.nom, p->arme.valeur);

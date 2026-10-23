@@ -2,8 +2,9 @@
 
 **Duckgeon** est un RPG tour par tour écrit en **C** avec **SDL2**. Une équipe de
 héros canards descend les 10 étages d'un donjon jusqu'au Canard Noir. Le projet
-contient aussi **Le Donjon**, la version console « classique » du sujet (création
-de personnages, combats, sauvegarde).
+contient aussi **Le Donjon**, la version terminal : le menu du sujet (création
+de personnages, combats, sauvegarde) et **tout le jeu jouable sans interface
+graphique** (étages, boss, duels en équipe, bestiaire, boutique).
 
 ![Écran titre](docs/captures/menu.png)
 
@@ -11,13 +12,14 @@ de personnages, combats, sauvegarde).
 |---|---|
 | ![Combat contre le Roi des Gelées](docs/captures/combat3.png) | ![Boutique de cosmétiques](docs/captures/boutique.png) |
 | ![Mes héros](docs/captures/heros.png) | ![Répartir les points de stats](docs/captures/stats.png) |
+| ![Bestiaire](docs/captures/bestiaire.png) | ![Table des éléments](docs/captures/elements.png) |
 
 ## Sommaire
 
 1. [Les deux programmes](#les-deux-programmes)
 2. [Installation](#installation)
 3. [Comment jouer à Duckgeon](#comment-jouer-à-duckgeon)
-4. [La version console (Le Donjon)](#la-version-console-le-donjon)
+4. [Jouer dans le terminal (Le Donjon)](#jouer-dans-le-terminal-le-donjon)
 5. [Sauvegardes](#sauvegardes)
 6. [Modélisation Merise](#modélisation-merise)
 7. [Architecture du code](#architecture-du-code)
@@ -30,11 +32,12 @@ de personnages, combats, sauvegarde).
 | Exécutable  | Nom          | Interface        | Contenu                                                                 |
 |-------------|--------------|------------------|-------------------------------------------------------------------------|
 | `./duckgeon`| **Duckgeon** | Graphique (SDL2) | Combat en équipe, 10 étages, boss, éditeur de canards, boutique, duel local |
-| `./donjon`  | **Le Donjon**| Terminal         | Menu du sujet : créer, afficher, combattre, sauvegarder/charger, inventaire, améliorer |
+| `./donjon`  | **Le Donjon**| Terminal         | Menu du sujet + le jeu complet en texte : étages, boss, duel en équipe, bestiaire, éléments, boutique |
 
-Les deux partagent **la même logique** (`personnage.c`, `inventaire.c`, `donjon.c`,
-`sauvegarde.c`...) et **le même fichier de sauvegarde** `donjon.sav` : un héros
-créé dans la console se retrouve dans Duckgeon, et inversement.
+Les deux partagent **la même logique** (`personnage.c`, `combat.c`, `donjon.c`,
+`sauvegarde.c`...) et **les mêmes fichiers de sauvegarde** (`donjon.sav` et
+`progression.sav`) : une partie commencée dans le terminal se continue dans
+Duckgeon, et inversement.
 
 ---
 
@@ -101,6 +104,7 @@ Liberation, Arial). Si aucune n'est trouvée, placez un fichier
 | **Préparer le combat**   | Mode (bots ou duel), taille des équipes, choix des héros, choix de l'étage       |
 | **Combat**               | Tour par tour, voir ci-dessous                                                   |
 | **Boutique**             | Acheter des cosmétiques avec le foie gras, les essayer et les équiper            |
+| **Bestiaire**            | Fiche de chaque monstre (stats à chaque étage, attaques, éléments) et table des éléments |
 
 ### Le combat
 
@@ -113,10 +117,13 @@ Le combat s'inspire de *Honkai: Star Rail* :
 - **Compétence (E)** : coûte 1 point de compétence, effet propre à la classe.
 - **Ultime (1 à 4)** : quand la jauge d'énergie est pleine, à lancer à tout
   moment pendant votre tour.
-- **Faiblesses** : chaque monstre affiche ses éléments faibles. Le frapper avec
-  l'un d'eux vide sa barre blanche ; à zéro il est **brisé** (dégâts bonus, tour
-  retardé, effet de l'élément).
+- **Éléments** : voir [ci-dessous](#les-éléments). Frapper un ennemi avec un
+  élément fort contre le sien fait plus de dégâts et vide sa barre blanche ; à
+  zéro il est **brisé** (dégâts bonus, tour retardé, effet de l'élément). Le
+  panneau de l'action indique si l'attaque est efficace contre la cible visée.
 - **Boss** : sous 50 % de PV, ils passent en **phase 2** (plus forts, plus agressifs).
+- **Défense contre les monstres** : face aux monstres, la DEF d'un héros compte
+  moitié moins qu'en duel. Une équipe bien montée prend donc encore des coups.
 
 | Touche              | Action                              |
 |---------------------|-------------------------------------|
@@ -131,6 +138,47 @@ Le combat s'inspire de *Honkai: Star Rail* :
 **Duel local** : deux joueurs sur le même PC, chacun son tour. Les héros sont
 copiés à PV pleins : aucune conséquence sur le donjon.
 
+![Panneau d'action : nom et effet selon l'élément, efficacité contre la cible](docs/captures/combat_elements.png)
+
+### Les éléments
+
+Chaque héros choisit un élément (dans l'éditeur ou avec le menu 8 du
+terminal). Il change **trois choses** :
+
+1. **Le nom des attaques** : *Fendoir* devient *Fendoir de feu*, *Fendoir de
+   givre*, *Fendoir quantique*... Les soins et les bonus gardent leur nom.
+2. **L'effet ajouté à chaque attaque** (une fois par cible et par action) :
+
+   | Élément    | Effet sur les attaques                                      |
+   |------------|-------------------------------------------------------------|
+   | Physique   | **Impact** : +15 % de dégâts                                |
+   | Feu        | **Brûlure** : 15 % de l'ATK par tour pendant 2 tours        |
+   | Glace      | **Givre** : retarde l'action de la cible de 10 %            |
+   | Foudre     | **Surcharge** : entame la garde ennemie 50 % plus vite      |
+   | Vent       | **Rafale** : avance le prochain tour du héros de 10 %       |
+   | Quantique  | **Intrication** : ignore 25 % de la DEF de la cible         |
+   | Imaginaire | **Illusion** : DEF de la cible −15 % pendant 2 tours        |
+
+3. **Les dégâts selon l'élément de la cible** : chaque élément est **fort**
+   contre deux éléments (+25 % de dégâts, la garde baisse) et **faible** contre
+   deux autres (−20 %). Les monstres ont aussi un élément, qui compte dans les
+   deux sens.
+
+   | Élément    | Fort contre            | Faible contre          |
+   |------------|------------------------|------------------------|
+   | Feu        | Glace, Vent            | Quantique, Imaginaire  |
+   | Glace      | Vent, Foudre           | Feu, Imaginaire        |
+   | Vent       | Foudre, Physique       | Feu, Glace             |
+   | Foudre     | Physique, Quantique    | Glace, Vent            |
+   | Physique   | Quantique, Imaginaire  | Vent, Foudre           |
+   | Quantique  | Imaginaire, Feu        | Physique, Foudre       |
+   | Imaginaire | Feu, Glace             | Physique, Quantique    |
+
+   Le cycle : Feu → Glace → Vent → Foudre → Physique → Quantique → Imaginaire →
+   Feu ; chaque élément bat les **deux suivants**. Aucun n'est avantagé.
+
+Ces informations sont affichées dans la fiche du héros, dans l'éditeur, dans
+le bestiaire et pendant le combat.
 ### Les classes
 
 | Classe       | PV  | ATK | DEF | VIT | Rôle                                   |
@@ -138,11 +186,15 @@ copiés à PV pleins : aucune conséquence sur le donjon.
 | Guerrier     | 120 | 14  | 8   | 95  | Encaisse, frappe en zone, bouclier     |
 | Mage         | 80  | 20  | 3   | 100 | Dégâts de zone, météore sur tous       |
 | Voleur       | 95  | 16  | 5   | 115 | Poison, rafale de coups aléatoires     |
-| Paladin      | 130 | 12  | 10  | 90  | Boucliers d'équipe, soin de groupe     |
+| Paladin      | 130 | 12  | 10  | 90  | Bouclier d'équipe (5 tours d'attente), soin de groupe |
 | Archer       | 85  | 18  | 4   | 110 | Tir perforant, pluie de flèches        |
 | Prêtre       | 90  | 13  | 5   | 98  | Soins, purification, réanimation       |
 | Nécromancien | 85  | 18  | 4   | 102 | Drain de vie, malédiction de zone      |
 | Barde        | 90  | 14  | 5   | 108 | Bonus d'attaque, fait rejouer un allié |
+
+Le bouclier du paladin (*Égide sacrée*, 8 + 2 × DEF sur toute l'équipe) ne peut
+être relancé qu'après **5 tours du paladin**. Le temps restant s'affiche sous
+le bouton de compétence.
 
 ### Les 10 étages
 
@@ -193,7 +245,11 @@ Avant l'achat, il y est affiché avec un cadenas.
 
 ---
 
-## La version console (Le Donjon)
+## Jouer dans le terminal (Le Donjon)
+
+`./donjon` est un jeu complet **sans aucune interface graphique** (aucune
+dépendance à SDL). Les cinq premières entrées sont celles du sujet ; les
+suivantes donnent accès au reste du jeu.
 
 ```
 ===== LE DONJON - GESTION RPG =====
@@ -204,13 +260,62 @@ Avant l'achat, il y est affiché avec un cadenas.
 5. Charger une partie
 6. Inventaire
 7. Ameliorer un personnage (points de stats)
+8. Changer l'element d'un personnage
+9. Bestiaire
+10. Table des elements
+11. Boutique de cosmetiques (32 foie gras)
+12. Se reposer au camp (soigne tout le monde)
 0. Quitter
 ```
 
-- **Combat** : une attaque, ou un combat complet jusqu'au K.O. Le vainqueur gagne
-  de l'XP, un objet et un point de stats.
+**3. Lancer un combat** propose trois modes :
+
+| Mode                   | Description |
+|------------------------|-------------|
+| Explorer le donjon     | Choix de l'étage (jusqu'au plus haut débloqué) et d'une équipe de 1 à 4 héros, puis combat tour par tour contre les vagues de monstres et les boss. Mêmes règles et mêmes récompenses que Duckgeon. |
+| Duel en équipe         | Deux joueurs sur le même clavier, chacun son équipe. Sans conséquence sur les héros. |
+| Duel classique 1 contre 1 | Le combat du sujet : une attaque, ou un combat complet jusqu'au K.O. (`attaquer()`), avec l'affinité des éléments. |
+
+Un tour de combat dans le terminal :
+
+```
+--------------------------------------------------------------------------
+ Etage 1 : Les Caves humides - vague 1/2
+--------------------------------------------------------------------------
+VOTRE EQUIPE   (points de competence : 3/5)
+ 1. Bob              Physique   PV [##########..]  116/130   Energie  60/100
+ 2. Mia              Glace      PV [##########..]   68/80    Energie  70/120
+ENNEMIS
+ A. Loup sombre A    Vent       PV [############]   57/57    Garde  20/20
+     Faible a : Feu, Glace
+ B. Loup sombre B    Vent       PV [############]   57/57    Garde  20/20
+     Faible a : Feu, Glace
+Ordre des tours : Mia > Bob > Loup sombre A > Loup sombre B > Mia > Bob
+--------------------------------------------------------------------------
+Tour de Mia (Mage, Glace) - energie 70/120
+  1. Étincelle de givre (attaque de base, +1 point de competence)
+  2. Orbe de givre (competence, 1 point)
+  3. Ultime  [aucun heros pret : energie insuffisante]
+  4. Details des capacites et efficacite
+  0. Fuir le combat
+Votre choix : 1
+Cible :
+  1. Loup sombre A    PV 57/57  Vent (efficace) [entame sa garde]
+  2. Loup sombre B    PV 57/57  Vent (efficace) [entame sa garde]
+Votre choix (0 = retour) : 1
+
+ > Mia : Étincelle de givre
+     Loup sombre A : -22 PV (Glace) efficace !
+     Loup sombre A : Givre
+```
+
+- La progression (étages débloqués, foie gras, cosmétiques) est enregistrée
+  automatiquement dans `progression.sav`. Les héros s'enregistrent avec le
+  menu 4.
+- Les cosmétiques achetés dans le terminal sont visibles dans Duckgeon.
 - **Saisies robustes** : `abc`, ligne vide ou nombre hors limites sont refusés,
   et `Ctrl+D` quitte proprement.
+- Sous Windows, la console passe en UTF-8 pour afficher les accents.
 
 ---
 
@@ -218,10 +323,11 @@ Avant l'achat, il y est affiché avec un cadenas.
 
 | Fichier           | Contenu                                               | Écrit par |
 |-------------------|-------------------------------------------------------|-----------|
-| `donjon.sav`      | Tous les héros (binaire, format v2)                   | Console (menu 4) et Duckgeon (automatique) |
-| `progression.sav` | Étage max, foie gras, cosmétiques achetés, étages déjà terminés | Duckgeon (automatique) |
+| `donjon.sav`      | Tous les héros (binaire, format v2)                   | Terminal (menu 4) et Duckgeon (automatique) |
+| `progression.sav` | Étage max, foie gras, cosmétiques achetés, étages déjà terminés | Terminal et Duckgeon (automatique) |
 
-Duckgeon charge les deux fichiers au démarrage. Il sauvegarde à chaque
+Les deux programmes chargent la progression au démarrage ; Duckgeon charge
+aussi les héros. Il sauvegarde à chaque
 changement d'écran et en quittant. Les fichiers sont créés dans le dossier
 d'où le jeu est lancé.
 
@@ -253,6 +359,8 @@ du modèle logique au code est détaillé dans le [modèle physique](#modèle-ph
 | `plumage`, `coupe`, `coiffe`... | Options d'apparence (13 indices)  | Entier      | Option payante ⇒ cosmétique acheté        |
 | `libelleClasse`   | Guerrier, Mage...                               | Texte       | 8 valeurs                                 |
 | `libelleElement`  | Physique, Feu, Glace, Foudre, Vent, Quantique, Imaginaire | Texte | 7 valeurs                          |
+| `effetElement`    | Effet ajouté aux attaques (Brûlure, Givre...)   | Texte       | 1 par élément                             |
+| `recharge`        | Tours d'attente après une compétence            | Entier      | 5 pour le paladin, 0 sinon                |
 | `nomObjet`, `typeObjet`, `valeur` | Objet du sac (soin ou arme)     | Texte, énum, entier | Sac de 5 objets max            |
 | `nomCapacite`, `typeAction`, `ciblage` | Capacité d'une classe      | Texte, énum | 3 par classe (basique, compétence, ultime) |
 | `numeroEtage`, `nomEtage`, `nbVagues` | Étage du donjon             | Entier, texte | 1 ≤ numéro ≤ 10                       |
@@ -278,7 +386,8 @@ erDiagram
     ETAGE }|--|{ MONSTRE : "est peuplé de"
     ETAGE |o--o| MONSTRE : "est gardé par (boss)"
     MONSTRE }o--|| ELEMENT : "frappe avec"
-    MONSTRE }|--o{ ELEMENT : "est faible à"
+    MONSTRE }o--o{ ELEMENT : "faiblesse bonus"
+    ELEMENT }o--o{ ELEMENT : "est fort contre (2)"
 
     JOUEUR {
         int etageMax
@@ -303,9 +412,11 @@ erDiagram
         int defBase
         int vitBase
         int chanceCritique
+        int recharge
     }
     ELEMENT {
         string libelle
+        string effetAttaque
     }
     CAPACITE {
         string nom
@@ -356,7 +467,8 @@ Cardinalités en notation Merise :
 | NETTOYER               | JOUEUR     | 0,n     | ETAGE      | 0,n     | Bonus de premier passage              |
 | PEUPLER                | ETAGE      | 1,n     | MONSTRE    | 1,n     | Monstres pouvant apparaître           |
 | GARDER                 | ETAGE      | 0,1     | MONSTRE    | 0,1     | Boss de la dernière vague             |
-| ÊTRE_FAIBLE            | MONSTRE    | 1,n     | ELEMENT    | 0,n     |                                       |
+| ÊTRE_FAIBLE (bonus)    | MONSTRE    | 0,n     | ELEMENT    | 0,n     | En plus des faiblesses de son élément |
+| BATTRE                 | ELEMENT (fort) | 2,2 | ELEMENT (faible) | 2,2 | Association réflexive : le cycle des éléments |
 | FRAPPER_AVEC (monstre) | MONSTRE    | 1,1     | ELEMENT    | 0,n     |                                       |
 
 **Règles de gestion** :
@@ -369,6 +481,9 @@ Cardinalités en notation Merise :
 - RG6 — Un cosmétique ne s'achète qu'une fois, si le joueur a assez de foie gras ; il sert alors à tous ses héros.
 - RG7 — Un héros ne porte un cosmétique payant que si le joueur l'a acheté.
 - RG8 — Un étage n'est accessible que si l'étage précédent a été nettoyé.
+- RG9 — Chaque élément en bat exactement deux autres et est battu par deux autres. Un coup fort fait +25 % de dégâts et entame la garde, un coup faible −20 %.
+- RG10 — Les faiblesses d'un monstre sont les éléments qui battent le sien, plus ses faiblesses bonus.
+- RG11 — Après sa compétence, le paladin attend 5 de ses tours avant de la relancer.
 
 ### MLD — Modèle logique des données
 
@@ -377,8 +492,9 @@ Chaque relation est donnée avec sa clé primaire et ses clés étrangères (`#`
 | Relation      | Clé primaire               | Attributs                                                                 | Clés étrangères |
 |---------------|----------------------------|---------------------------------------------------------------------------|-----------------|
 | JOUEUR        | idJoueur                   | etageMax, foieGras                                                        |                 |
-| ELEMENT       | idElement                  | libelle                                                                   |                 |
-| CLASSE        | idClasse                   | libelle, pvBase, atkBase, defBase, vitBase, chanceCritique                | #idElementDefaut → ELEMENT |
+| ELEMENT       | idElement                  | libelle, effetAttaque                                                     |                 |
+| BATTRE        | (#idFort, #idFaible)       |                                                                           | #idFort → ELEMENT, #idFaible → ELEMENT |
+| CLASSE        | idClasse                   | libelle, pvBase, atkBase, defBase, vitBase, chanceCritique, recharge      | #idElementDefaut → ELEMENT |
 | CAPACITE      | idCapacite                 | nom, description, typeAction, ciblage                                     | #idClasse → CLASSE |
 | HEROS         | idHeros                    | nom, pv, pvMax, atk, def, vit, niveau, xp, pointsStats, victoires, plumage, coupe, couleurCheveux, couleurYeux, regard, tenue, tenue2, coiffe, pilosite, marque, cape, aura, corpulence | #idJoueur → JOUEUR, #idClasse → CLASSE, #idElement → ELEMENT, #idArme → OBJET (peut être NULL) |
 | OBJET         | idObjet                    | nom, type, valeur                                                         |                 |
@@ -395,8 +511,10 @@ Chaque relation est donnée avec sa clé primaire et ses clés étrangères (`#`
 
 ```
 JOUEUR      ([idJoueur], etageMax, foieGras)
-ELEMENT     ([idElement], libelle)
-CLASSE      ([idClasse], libelle, pvBase, atkBase, defBase, vitBase, chanceCritique, #idElementDefaut)
+ELEMENT     ([idElement], libelle, effetAttaque)
+BATTRE      ([#idFort, #idFaible])
+CLASSE      ([idClasse], libelle, pvBase, atkBase, defBase, vitBase, chanceCritique, recharge,
+             #idElementDefaut)
 CAPACITE    ([idCapacite], nom, description, typeAction, ciblage, #idClasse)
 HEROS       ([idHeros], nom, pv, pvMax, atk, def, vit, niveau, xp, pointsStats, victoires,
              plumage, coupe, couleurCheveux, couleurYeux, regard, tenue, tenue2, coiffe,
@@ -415,7 +533,7 @@ ETRE_FAIBLE ([#idMonstre, #idElement])
 
 Les associations 1,1 deviennent des clés étrangères dans la table côté « 1,1 ».
 Les associations n,n deviennent des tables (ACHETER, NETTOYER, PEUPLER,
-ETRE_FAIBLE, TRANSPORTER). L'association PORTER est représentée par les colonnes
+ETRE_FAIBLE, BATTRE, TRANSPORTER). L'association PORTER est représentée par les colonnes
 `coiffe` et `plumage` de HEROS, contrôlées par la règle RG7.
 
 ### Modèle physique (MPD) : correspondance avec le code C
@@ -426,12 +544,13 @@ ETRE_FAIBLE, TRANSPORTER). L'association PORTER est représentée par les colonn
 | TRANSPORTER / ÉQUIPER | `Objet inventaire[5]`, `int nbObjets`, `Objet arme` dans `Personnage` | `donjon.sav`  |
 | JOUEUR, ACHETER, NETTOYER | `Progression` : `etageMax`, `foieGras`, masques de bits `cosmetiques` et `etagesNettoyes` | `progression.sav` |
 | CLASSE                | `enum Classe` + table `STATS_CLASSE[]` (`personnage.c`)         | Constantes du code  |
-| ELEMENT               | `enum Element`                                                  | Constantes du code  |
+| ELEMENT               | `enum Element` + effets `ELEMENTS_ATTAQUE[]` (`combat.c`)       | Constantes du code  |
+| BATTRE                | Ordre du cycle `CYCLE_ELEMENTS[]` : chacun bat les deux suivants (`personnage.c`) | Constantes du code |
 | CAPACITE              | Table `CAPACITES[classe][action]` (`combat.c`)                  | Constantes du code  |
 | OBJET                 | Table `TABLE_BUTIN[]` (`objet.c`)                               | Constantes du code  |
 | COSMETIQUE            | Table `CATALOGUE[]` (`boutique.c`)                              | Constantes du code  |
 | ETAGE, PEUPLER        | Table `ETAGES[]` de `InfoEtage` (`combat.c`)                    | Constantes du code  |
-| MONSTRE, ETRE_FAIBLE  | Table `MONSTRES[]`, faiblesses en masque de bits (`combat.c`)   | Constantes du code  |
+| MONSTRE, ETRE_FAIBLE  | Table `MONSTRES[]` de `InfoMonstre`, faiblesses bonus en masque de bits (`combat.c`) | Constantes du code  |
 
 Choix de conception :
 
@@ -492,8 +611,9 @@ include/                         src/
 ├── sauvegarde.h   ─────────────  sauvegarde.c   fichiers binaires, compatibilité v1/v2
 ├── boutique.h     ─────────────  boutique.c     foie gras, catalogue, achats
 ├── saisie.h       ─────────────  saisie.c       saisies clavier sûres (console)
-├── main.h         ─────────────  main.c         menu console « Le Donjon »
-├── combat.h       ─────────────  combat.c       moteur de combat, étages, monstres, boss
+├── combat.h       ─────────────  combat.c       moteur de combat, éléments, étages, monstres, boss
+├── main.h         ─────────────  main.c         menu du terminal « Le Donjon »
+├── console_jeu.h  ─────────────  console_jeu.c  le jeu complet en texte (étages, duels, bestiaire...)
 ├── gui.h          ─────────────  gui.c, gui_formes.c   fenêtre SDL, texte, widgets, formes
 ├── gui_sprite.h   ─────────────  gui_sprite.c   dessin vectoriel des canards et monstres
 └── gui_app.h      ─────────────  gui_main.c     main de Duckgeon, écran titre
@@ -501,12 +621,13 @@ include/                         src/
                                   gui_editeur.c  éditeur de héros
                                   gui_combat.c   écran de combat et de victoire
                                   gui_boutique.c boutique
+                                  gui_bestiaire.c bestiaire et table des éléments
 docs/
 ├── RAPPORT.md       rapport technique (choix, questions de réflexion, tests)
 └── captures/        captures d'écran
 ```
 
-- La **logique** (au-dessus de `combat.h`) ne dépend pas de SDL : elle est
+- La **logique** (jusqu'à `console_jeu.h`) ne dépend pas de SDL : elle est
   partagée par les deux programmes et testable sans fenêtre.
 - Le **moteur de combat** applique les règles et décrit chaque action par une
   liste d'effets ; l'interface se contente de les animer.

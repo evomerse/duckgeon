@@ -18,13 +18,17 @@ enum Classe {
     NB_CLASSES
 };
 
-/** Éléments (type de dégâts) utilisés par le combat de l'interface
- *  graphique : un ennemi faible à l'élément d'un héros voit sa barre de
- *  résistance diminuer, puis se « brise ». */
+/** Éléments (type de dégâts). Chaque élément est fort contre deux autres
+ *  et faible contre deux autres (voir elementsForts / elementsFaibles) :
+ *  un coup « fort » fait plus de dégâts et entame la garde de la cible. */
 enum Element {
     PHYSIQUE, FEU, GLACE, FOUDRE, VENT, QUANTIQUE, IMAGINAIRE,
     NB_ELEMENTS
 };
+
+/* Dégâts (en %) d'un élément fort / faible contre l'élément de la cible. */
+#define ELEMENT_FORT_POURCENT   125
+#define ELEMENT_FAIBLE_POURCENT  80
 
 /* Nombre de variantes pour chaque option de l'apparence. */
 /* Les options au-delà de *_BASE sont des cosmétiques à débloquer avec du
@@ -116,6 +120,9 @@ enum Stat { STAT_PV, STAT_ATK, STAT_DEF, STAT_VIT, NB_STATS };
  */
 void creerPersonnage(Personnage *p);
 
+/** Demande l'élément des attaques (Entrée/0 garde l'élément actuel). */
+void choisirElement(Personnage *p);
+
 /** Affiche une ligne décrivant le personnage (lecture seule : const). */
 void afficherPersonnage(const Personnage *p);
 
@@ -145,6 +152,25 @@ const char *nomElement(enum Element element);
 
 /** Élément par défaut d'une classe. */
 enum Element elementClasse(enum Classe classe);
+
+/** Éléments contre lesquels `e` est fort (masque de bits 1u << Element). */
+unsigned elementsForts(enum Element e);
+
+/** Éléments contre lesquels `e` est faible : ceux qui sont forts contre lui. */
+unsigned elementsFaibles(enum Element e);
+
+/**
+ * Multiplicateur (en %) d'un coup d'élément `attaque` sur une cible
+ * d'élément `cible` : ELEMENT_FORT_POURCENT, ELEMENT_FAIBLE_POURCENT ou 100.
+ */
+int multiplicateurElement(enum Element attaque, enum Element cible);
+
+/** Élément de rang `rang` (0..NB_ELEMENTS-1) dans le cycle des forces :
+ *  chacun est fort contre les deux suivants. */
+enum Element elementCycle(int rang);
+
+/** Écrit la liste des éléments d'un masque ("Glace, Vent") dans buf. */
+void ecrireElements(unsigned masque, char *buf, int taille);
 
 /** Chance de coup critique de la classe, en pourcentage. */
 int chanceCritique(const Personnage *p);

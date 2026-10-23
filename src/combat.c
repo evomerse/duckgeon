@@ -18,12 +18,16 @@
 #define ENERGIE_KO        10
 #define RESISTANCE_DUEL   60  /* barre de résistance des héros en duel */
 #define TOURS_AVANT_FATIGUE 30
+#define POIDS_DEF          6.0 /* dégâts = ATK x 100 / (100 + POIDS x DEF) */
+#define POIDS_DEF_HEROS_PVE 3.0 /* DEF d'un héros frappé par un monstre    */
 #define BIT(e)            (1u << (e))
 
 /* ------------------------------------------------------------------ */
 /*  Capacités des classes                                             */
 /* ------------------------------------------------------------------ */
 
+/* Noms de base : les attaques reçoivent ensuite le nom de l'élément du
+ * héros (nomCapacite) et l'effet de cet élément (effetElement). */
 static const Capacite CAPACITES[NB_CLASSES][NB_ACTIONS] = {
     [GUERRIER] = {
         { "Taille", "Frappe un ennemi : 100 % ATK.", CIBLE_ENNEMI },
@@ -32,18 +36,18 @@ static const Capacite CAPACITES[NB_CLASSES][NB_ACTIONS] = {
     },
     [MAGE] = {
         { "Étincelle", "Projectile magique : 100 % ATK.", CIBLE_ENNEMI },
-        { "Boule de feu", "Explose sur un ennemi (150 % ATK) et ses voisins (75 %).", CIBLE_ZONE },
-        { "Météore", "Pluie de feu sur tous les ennemis : 200 % ATK.", CIBLE_TOUS_ENNEMIS },
+        { "Orbe", "Explose sur un ennemi (150 % ATK) et ses voisins (75 %).", CIBLE_ZONE },
+        { "Météore", "Pluie de météores sur tous les ennemis : 200 % ATK.", CIBLE_TOUS_ENNEMIS },
     },
     [VOLEUR] = {
         { "Coup bas", "Frappe un ennemi : 100 % ATK.", CIBLE_ENNEMI },
-        { "Lames empoisonnées", "170 % ATK et poison (50 % ATK, 2 tours).", CIBLE_ENNEMI },
-        { "Danse des ombres", "6 coups de 70 % ATK sur des ennemis au hasard.", CIBLE_TOUS_ENNEMIS },
+        { "Lame venimeuse", "170 % ATK et poison (50 % ATK, 2 tours).", CIBLE_ENNEMI },
+        { "Danse des lames", "6 coups de 70 % ATK sur des ennemis au hasard.", CIBLE_TOUS_ENNEMIS },
     },
     [PALADIN] = {
-        { "Coup de bouclier", "100 % ATK + 50 % DEF sur un ennemi.", CIBLE_ENNEMI },
-        { "Égide sacrée", "Bouclier sur toute l'équipe (12 + 3 x DEF).", CIBLE_TOUS_ALLIES },
-        { "Jugement divin", "150 % ATK à tous les ennemis, soigne l'équipe de 15 % PV.", CIBLE_TOUS_ENNEMIS },
+        { "Frappe sacrée", "100 % ATK + 50 % DEF sur un ennemi.", CIBLE_ENNEMI },
+        { "Égide sacrée", "Bouclier sur toute l'équipe (8 + 2 x DEF).", CIBLE_TOUS_ALLIES },
+        { "Jugement", "150 % ATK à tous les ennemis, soigne l'équipe de 15 % PV.", CIBLE_TOUS_ENNEMIS },
     },
     [ARCHER] = {
         { "Tir", "Flèche sur un ennemi : 100 % ATK.", CIBLE_ENNEMI },
@@ -51,17 +55,17 @@ static const Capacite CAPACITES[NB_CLASSES][NB_ACTIONS] = {
         { "Pluie de flèches", "170 % ATK à tous les ennemis, l'archer avance son tour de 50 %.", CIBLE_TOUS_ENNEMIS },
     },
     [PRETRE] = {
-        { "Rayon sacré", "Frappe un ennemi : 100 % ATK.", CIBLE_ENNEMI },
+        { "Rayon", "Frappe un ennemi : 100 % ATK.", CIBLE_ENNEMI },
         { "Soin", "Soigne un allié (15 % PV max + 100 % ATK) et le purifie.", CIBLE_ALLIE },
         { "Bénédiction", "Soigne toute l'équipe (20 % PV max + 80 % ATK), ranime les K.O.", CIBLE_TOUS_ALLIES },
     },
     [NECROMANCIEN] = {
-        { "Trait d'ombre", "Frappe un ennemi : 100 % ATK.", CIBLE_ENNEMI },
-        { "Drain de vie", "160 % ATK, rend la moitié des dégâts en PV.", CIBLE_ENNEMI },
+        { "Trait", "Frappe un ennemi : 100 % ATK.", CIBLE_ENNEMI },
+        { "Drain vital", "160 % ATK, rend la moitié des dégâts en PV.", CIBLE_ENNEMI },
         { "Malédiction", "130 % ATK à tous, DEF -25 % et dégâts sur la durée (3 tours).", CIBLE_TOUS_ENNEMIS },
     },
     [BARDE] = {
-        { "Note aiguë", "Frappe un ennemi : 100 % ATK.", CIBLE_ENNEMI },
+        { "Note", "Frappe un ennemi : 100 % ATK.", CIBLE_ENNEMI },
         { "Hymne héroïque", "Allié : ATK +30 % (2 tours) et il rejoue immédiatement.", CIBLE_ALLIE },
         { "Symphonie", "Équipe : ATK +25 % (3 tours) et avance son tour de 40 %.", CIBLE_TOUS_ALLIES },
     },
@@ -73,16 +77,34 @@ static const int ENERGIE_ULTIME[NB_CLASSES] = {
     [ARCHER] = 110, [PRETRE] = 100, [NECROMANCIEN] = 120, [BARDE] = 100,
 };
 
-/* Faiblesses d'un héros en duel, selon son propre élément (chaque élément
- * est la faiblesse de deux autres : aucun n'est avantagé). */
-static const unsigned FAIBLESSES_HEROS[NB_ELEMENTS] = {
-    [PHYSIQUE]   = BIT(FEU) | BIT(VENT),
-    [FEU]        = BIT(GLACE) | BIT(QUANTIQUE),
-    [GLACE]      = BIT(FEU) | BIT(FOUDRE),
-    [FOUDRE]     = BIT(PHYSIQUE) | BIT(IMAGINAIRE),
-    [VENT]       = BIT(FOUDRE) | BIT(GLACE),
-    [QUANTIQUE]  = BIT(IMAGINAIRE) | BIT(PHYSIQUE),
-    [IMAGINAIRE] = BIT(QUANTIQUE) | BIT(VENT),
+/* Tours à attendre avant de relancer la compétence. Le bouclier du
+ * paladin protège toute l'équipe : sans attente, il le relançait à chaque
+ * tour et l'équipe ne prenait plus aucun dégât. */
+static const int RECHARGE_COMPETENCE[NB_CLASSES] = {
+    [PALADIN] = 5,
+};
+
+/* Ce que l'élément du héros ajoute à chacune de ses attaques. */
+#define BONUS_PHYSIQUE      15 /* % de dégâts                         */
+#define BRULURE_POURCENT    15 /* Feu : % de l'ATK par tour, 2 tours  */
+#define GIVRE_RETARD        10 /* Glace : % d'action perdu            */
+#define SURCHARGE_POURCENT  50 /* Foudre : garde entamée en plus (%)  */
+#define RAFALE_AVANCE       10 /* Vent : % d'action gagné             */
+#define INTRICATION_DEF     25 /* Quantique : % de DEF ignoré         */
+#define ILLUSION_DEF        15 /* Imaginaire : DEF -15 % (2 tours)    */
+
+static const struct {
+    const char *qualificatif; /* ajouté au nom des attaques */
+    const char *effet;
+    const char *description;
+} ELEMENTS_ATTAQUE[NB_ELEMENTS] = {
+    [PHYSIQUE]   = { "d'acier", "Impact", "+15 % de dégâts." },
+    [FEU]        = { "de feu", "Brûlure", "brûle la cible : 15 % ATK par tour pendant 2 tours." },
+    [GLACE]      = { "de givre", "Givre", "retarde l'action de la cible de 10 %." },
+    [FOUDRE]     = { "de foudre", "Surcharge", "entame la garde ennemie 50 % plus vite." },
+    [VENT]       = { "de tempête", "Rafale", "avance le prochain tour du héros de 10 %." },
+    [QUANTIQUE]  = { "quantique", "Intrication", "ignore 25 % de la DEF de la cible." },
+    [IMAGINAIRE] = { "imaginaire", "Illusion", "DEF de la cible -15 % pendant 2 tours." },
 };
 
 const Capacite *capaciteClasse(enum Classe classe, enum TypeAction action)
@@ -93,58 +115,124 @@ const Capacite *capaciteClasse(enum Classe classe, enum TypeAction action)
     return &CAPACITES[classe][action];
 }
 
+int capaciteOffensive(enum Classe classe, enum TypeAction action)
+{
+    enum Ciblage c = capaciteClasse(classe, action)->ciblage;
+    return c == CIBLE_ENNEMI || c == CIBLE_ZONE || c == CIBLE_TOUS_ENNEMIS;
+}
+
+static int elementValide(enum Element e)
+{
+    return e >= PHYSIQUE && e < NB_ELEMENTS;
+}
+
+const char *nomEffetElement(enum Element e)
+{
+    return elementValide(e) ? ELEMENTS_ATTAQUE[e].effet : "";
+}
+
+const char *effetElement(enum Element e)
+{
+    return elementValide(e) ? ELEMENTS_ATTAQUE[e].description : "";
+}
+
+int rechargeCompetence(enum Classe classe)
+{
+    return (classe >= 0 && classe < NB_CLASSES) ? RECHARGE_COMPETENCE[classe] : 0;
+}
+
+void nomCapacite(const Personnage *p, enum TypeAction action, char *buf, int taille)
+{
+    const Capacite *cap = capaciteClasse(p->classe, action);
+    if (capaciteOffensive(p->classe, action) && elementValide(p->element)) {
+        snprintf(buf, (size_t)taille, "%s %s", cap->nom, ELEMENTS_ATTAQUE[p->element].qualificatif);
+    } else {
+        snprintf(buf, (size_t)taille, "%s", cap->nom);
+    }
+}
+
+void descriptionCapacite(const Personnage *p, enum TypeAction action, char *buf, int taille)
+{
+    const Capacite *cap = capaciteClasse(p->classe, action);
+    int pos = snprintf(buf, (size_t)taille, "%s", cap->description);
+    if (pos < taille && capaciteOffensive(p->classe, action) && elementValide(p->element)) {
+        pos += snprintf(buf + pos, (size_t)(taille - pos), " %s : %s", ELEMENTS_ATTAQUE[p->element].effet,
+                        ELEMENTS_ATTAQUE[p->element].description);
+    }
+    if (pos < taille && action == ACTION_COMPETENCE && rechargeCompetence(p->classe) > 0) {
+        snprintf(buf + pos, (size_t)(taille - pos), " Recharge : %d tours.", rechargeCompetence(p->classe));
+    }
+}
+
 /* ------------------------------------------------------------------ */
 /*  Monstres                                                          */
 /* ------------------------------------------------------------------ */
 
-/** Ce que fait l'attaque spéciale d'un monstre. */
-enum Special {
-    SPECIAL_ZONE, SPECIAL_FORT, SPECIAL_RAGE, SPECIAL_TOUS, SPECIAL_POISON,
-    SPECIAL_INVOCATION, /* appelle un monstre en renfort (Roi des Gelées)  */
-    SPECIAL_DRAIN,      /* frappe tout le monde et se soigne (Liche)        */
-    SPECIAL_NEANT       /* frappe tout le monde et brise la DEF (Canard Noir) */
-};
-
-static const struct {
-    const char *nom;
-    int pv, atk, def, vit, resistance;
-    unsigned faiblesses;
-    enum Element element;
-    const char *attaque;
-    const char *special;
-    enum Special typeSpecial;
-    int chanceSpecial; /* en % */
-    const char *etat;  /* libellé de l'altération infligée (poison...) */
-    int boss;
-} MONSTRES[NB_MONSTRES] = {
-    [MONSTRE_GELEE]      = { "Gelée", 50, 10, 2, 85, 20, BIT(FEU) | BIT(FOUDRE), GLACE,
-                             "Bulle visqueuse", "Éclaboussure acide", SPECIAL_ZONE, 30, NULL, 0 },
-    [MONSTRE_SQUELETTE]  = { "Squelette", 62, 12, 5, 95, 30, BIT(PHYSIQUE) | BIT(IMAGINAIRE), PHYSIQUE,
-                             "Coup d'os", "Charge brutale", SPECIAL_FORT, 30, NULL, 0 },
-    [MONSTRE_LOUP]       = { "Loup sombre", 55, 13, 3, 120, 20, BIT(FEU) | BIT(VENT), PHYSIQUE,
-                             "Morsure", "Hurlement", SPECIAL_RAGE, 25, NULL, 0 },
-    [MONSTRE_GOLEM]      = { "Golem", 120, 15, 9, 75, 60, BIT(FOUDRE) | BIT(QUANTIQUE), PHYSIQUE,
-                             "Poing de pierre", "Séisme", SPECIAL_TOUS, 35, NULL, 0 },
-    [MONSTRE_SPECTRE]    = { "Spectre", 70, 15, 3, 105, 30, BIT(IMAGINAIRE) | BIT(GLACE), QUANTIQUE,
-                             "Toucher froid", "Lamentation", SPECIAL_POISON, 35, "Hanté", 0 },
-    [MONSTRE_DRAGON]     = { "Dragon ancien", 340, 20, 8, 100, 140,
-                             BIT(GLACE) | BIT(VENT) | BIT(QUANTIQUE), FEU,
-                             "Griffes", "Souffle ardent", SPECIAL_TOUS, 40, NULL, 1 },
-    [MONSTRE_CHAMPIGNON] = { "Champignon", 58, 11, 4, 80, 30, BIT(FEU) | BIT(GLACE), VENT,
-                             "Coup de chapeau", "Nuage de spores", SPECIAL_POISON, 35, "Empoisonné", 0 },
-    [MONSTRE_DIABLOTIN]  = { "Diablotin", 48, 14, 3, 130, 20, BIT(GLACE) | BIT(QUANTIQUE), FEU,
-                             "Coup de fourche", "Pluie de braises", SPECIAL_ZONE, 35, NULL, 0 },
-    [MONSTRE_GARGOUILLE] = { "Gargouille", 90, 15, 10, 90, 50, BIT(VENT) | BIT(IMAGINAIRE), FOUDRE,
-                             "Griffes de pierre", "Piqué foudroyant", SPECIAL_FORT, 30, NULL, 0 },
-    [MONSTRE_ROI_GELEE]  = { "Roi des Gelées", 260, 16, 5, 90, 110,
-                             BIT(FEU) | BIT(FOUDRE) | BIT(PHYSIQUE), GLACE,
-                             "Écrasement royal", "Appel royal", SPECIAL_INVOCATION, 40, NULL, 1 },
-    [MONSTRE_LICHE]      = { "Liche", 300, 19, 6, 105, 130,
-                             BIT(PHYSIQUE) | BIT(FEU) | BIT(IMAGINAIRE), QUANTIQUE,
-                             "Rayon nécrotique", "Siphon d'âmes", SPECIAL_DRAIN, 40, NULL, 1 },
-    [MONSTRE_CANARD_NOIR] = { "Canard Noir", 420, 22, 10, 115, 160,
-                              BIT(FOUDRE) | BIT(VENT) | BIT(QUANTIQUE), IMAGINAIRE,
-                              "Bec du Néant", "Coin-coin du Néant", SPECIAL_NEANT, 40, NULL, 1 },
+/* Statistiques de base (adaptées ensuite à l'étage et à l'équipe). Les
+ * faiblesses d'un monstre sont celles de son élément, plus d'éventuelles
+ * faiblesses bonus (qui n'entament que sa garde). */
+static const InfoMonstre MONSTRES[NB_MONSTRES] = {
+    [MONSTRE_GELEE] = {
+        "Gelée", "Une flaque gluante qui avance par petits bonds. Inoffensive... en apparence.",
+        50, 10, 2, 85, 20, 0, GLACE,
+        "Bulle visqueuse", "Éclaboussure acide", "110 % ATK sur la cible et 60 % sur ses voisins.",
+        SPECIAL_ZONE, 30, NULL, 0 },
+    [MONSTRE_SQUELETTE] = {
+        "Squelette", "Un ancien aventurier qui n'a jamais trouvé la sortie.",
+        62, 12, 5, 95, 30, BIT(IMAGINAIRE), PHYSIQUE,
+        "Coup d'os", "Charge brutale", "190 % ATK sur une seule cible.",
+        SPECIAL_FORT, 30, NULL, 0 },
+    [MONSTRE_LOUP] = {
+        "Loup sombre", "Rapide et affamé, il chasse en meute dans les couloirs.",
+        55, 13, 3, 120, 20, 0, VENT,
+        "Morsure", "Hurlement", "ATK +40 % pendant 3 tours, puis morsure à 80 % ATK.",
+        SPECIAL_RAGE, 25, NULL, 0 },
+    [MONSTRE_GOLEM] = {
+        "Golem", "Un bloc de pierre animé : lent, mais presque increvable.",
+        120, 15, 9, 75, 60, BIT(QUANTIQUE), PHYSIQUE,
+        "Poing de pierre", "Séisme", "70 % ATK sur toute l'équipe.",
+        SPECIAL_TOUS, 35, NULL, 0 },
+    [MONSTRE_SPECTRE] = {
+        "Spectre", "Une âme errante dont le contact glace le sang.",
+        70, 15, 3, 105, 30, BIT(IMAGINAIRE), QUANTIQUE,
+        "Toucher froid", "Lamentation", "100 % ATK et hante la cible (50 % ATK par tour, 2 tours).",
+        SPECIAL_POISON, 35, "Hanté", 0 },
+    [MONSTRE_DRAGON] = {
+        "Dragon ancien", "Le gardien du nid. Ses écailles ont la couleur des braises.",
+        340, 20, 8, 100, 140, BIT(GLACE) | BIT(VENT), FEU,
+        "Griffes", "Souffle ardent", "90 % ATK sur toute l'équipe, une chance sur deux de brûler.",
+        SPECIAL_TOUS, 40, NULL, 1 },
+    [MONSTRE_CHAMPIGNON] = {
+        "Champignon", "Il brille dans le noir et libère des spores au moindre choc.",
+        58, 11, 4, 80, 30, 0, VENT,
+        "Coup de chapeau", "Nuage de spores", "100 % ATK et empoisonne (50 % ATK par tour, 2 tours).",
+        SPECIAL_POISON, 35, "Empoisonné", 0 },
+    [MONSTRE_DIABLOTIN] = {
+        "Diablotin", "Petit, très rapide et toujours armé de sa fourche brûlante.",
+        48, 14, 3, 130, 20, BIT(GLACE), FEU,
+        "Coup de fourche", "Pluie de braises", "110 % ATK sur la cible et 60 % sur ses voisins.",
+        SPECIAL_ZONE, 35, NULL, 0 },
+    [MONSTRE_GARGOUILLE] = {
+        "Gargouille", "Une statue des remparts qui s'éveille au moindre bruit.",
+        90, 15, 10, 90, 50, BIT(IMAGINAIRE), FOUDRE,
+        "Griffes de pierre", "Piqué foudroyant", "190 % ATK sur une seule cible.",
+        SPECIAL_FORT, 30, NULL, 0 },
+    [MONSTRE_ROI_GELEE] = {
+        "Roi des Gelées", "Une gelée couronnée, énorme, qui commande à toutes les autres.",
+        260, 16, 5, 90, 110, BIT(PHYSIQUE), GLACE,
+        "Écrasement royal", "Appel royal", "Invoque une gelée en renfort (deux en phase 2).",
+        SPECIAL_INVOCATION, 40, NULL, 1 },
+    [MONSTRE_LICHE] = {
+        "Liche", "Un sorcier mort depuis des siècles, qui se nourrit des âmes.",
+        300, 19, 6, 105, 130, BIT(FEU), QUANTIQUE,
+        "Rayon nécrotique", "Siphon d'âmes", "75 % ATK sur toute l'équipe, se soigne de la moitié.",
+        SPECIAL_DRAIN, 40, NULL, 1 },
+    [MONSTRE_CANARD_NOIR] = {
+        "Canard Noir", "Le maître du donjon. Il n'est pas venu pour du pain.",
+        380, 21, 10, 115, 160, BIT(FOUDRE), IMAGINAIRE,
+        "Bec du Néant", "Coin-coin du Néant",
+        "85 % ATK sur toute l'équipe, DEF -30 % (2 tours) et vole 25 % de l'énergie.",
+        SPECIAL_NEANT, 40, NULL, 1 },
 };
 
 const char *nomMonstre(enum Monstre m)
@@ -155,6 +243,19 @@ const char *nomMonstre(enum Monstre m)
 int monstreEstBoss(enum Monstre m)
 {
     return m >= 0 && m < NB_MONSTRES && MONSTRES[m].boss;
+}
+
+const InfoMonstre *infoMonstre(enum Monstre m)
+{
+    return (m >= 0 && m < NB_MONSTRES) ? &MONSTRES[m] : NULL;
+}
+
+unsigned faiblessesMonstre(enum Monstre m)
+{
+    if (m < 0 || m >= NB_MONSTRES) {
+        return 0;
+    }
+    return elementsFaibles(MONSTRES[m].element) | MONSTRES[m].faiblessesBonus;
 }
 
 /* ------------------------------------------------------------------ */
@@ -195,6 +296,21 @@ const InfoEtage *combatEtage(int etage)
     if (etage < 1) etage = 1;
     if (etage > ETAGE_MAX) etage = ETAGE_MAX;
     return &ETAGES[etage - 1];
+}
+
+unsigned etagesMonstre(enum Monstre m)
+{
+    unsigned masque = 0;
+    for (int e = 0; e < ETAGE_MAX; e++) {
+        int present = ETAGES[e].boss == m;
+        for (int k = 0; k < ETAGES[e].taillePool; k++) {
+            present |= ETAGES[e].pool[k] == m;
+        }
+        if (present) {
+            masque |= 1u << e;
+        }
+    }
+    return masque;
 }
 
 /* ------------------------------------------------------------------ */
@@ -248,6 +364,7 @@ static void journaliser(Combat *cb, const char *format, ...)
     vsnprintf(cb->journal[cb->nbJournal], JOURNAL_LONGUEUR, format, args);
     va_end(args);
     cb->nbJournal++;
+    cb->nbJournalTotal++;
 }
 
 /** Enregistre un effet pour l'animation de l'interface. */
@@ -429,15 +546,23 @@ static int calculerDegats(const Combat *cb, int a, int c, int pourcent, int *cri
     if (ca->heros && ca->p->classe == MAGE) {
         def /= 2; /* la magie ignore la moitié de l'armure */
     }
+    if (ca->heros && ca->p->element == QUANTIQUE) {
+        def *= (100 - INTRICATION_DEF) / 100.0;
+    }
 
-    double degats = atk * pourcent / 100.0 * 100.0 / (100.0 + 6.0 * def);
-    if (cc->resistanceMax > 0) {
-        if (!(cc->faiblesses & BIT(ca->p->element))) {
-            degats *= 0.9; /* résistance hors faiblesse */
-        }
-        if (cc->brise) {
-            degats *= 1.25; /* cible brisée : vulnérable */
-        }
+    /* Face aux monstres, la DEF des héros compte moitié moins : sinon une
+     * équipe un peu montée en niveau ne prenait presque plus de dégâts.
+     * Entre héros (duel), la formule reste la même. */
+    double poidsDef = (!ca->heros && cc->heros) ? POIDS_DEF_HEROS_PVE : POIDS_DEF;
+    double degats = atk * pourcent / 100.0 * 100.0 / (100.0 + poidsDef * def);
+
+    /* Affinité : fort contre l'élément de la cible +25 %, faible -20 %. */
+    degats *= multiplicateurElement(ca->p->element, cc->p->element) / 100.0;
+    if (ca->heros && ca->p->element == PHYSIQUE) {
+        degats *= (100 + BONUS_PHYSIQUE) / 100.0;
+    }
+    if (cc->resistanceMax > 0 && cc->brise) {
+        degats *= 1.25; /* cible brisée : vulnérable */
     }
 
     /* Duel : au-delà de 30 actions, la fatigue augmente les dégâts pour
@@ -452,6 +577,18 @@ static int calculerDegats(const Combat *cb, int a, int c, int pourcent, int *cri
     }
     degats *= aleatoire(0.92, 1.08);
     return degats < 1 ? 1 : (int)(degats + 0.5);
+}
+
+/** Dégâts sur la durée (on garde le plus fort et le plus long). */
+static void appliquerDot(Combattant *c, int degats, int tours, enum Element e)
+{
+    if (degats > c->dot) {
+        c->dot = degats;
+    }
+    if (tours > c->toursDot) {
+        c->toursDot = tours;
+    }
+    c->elementDot = e;
 }
 
 /** Rupture : la cible perd son tour en partie et subit un effet élémentaire. */
@@ -512,16 +649,46 @@ static int frapper(Combat *cb, int a, int c, int pourcent, int resistance)
     if (!combatVivant(cb, c)) {
         return 0;
     }
+    Combattant *ca = &cb->c[a];
+    Combattant *cc = &cb->c[c];
+    enum Element e = ca->p->element;
     int critique;
     int degats = calculerDegats(cb, a, c, pourcent, &critique);
-    subirDegats(cb, a, c, degats, critique, cb->c[a].p->element);
+    subirDegats(cb, a, c, degats, critique, e);
 
-    Combattant *cc = &cb->c[c];
-    if (cc->resistanceMax > 0 && estVivant(cc->p) && !cc->brise
-        && (cc->faiblesses & BIT(cb->c[a].p->element))) {
+    if (cc->resistanceMax > 0 && estVivant(cc->p) && !cc->brise && (cc->faiblesses & BIT(e))) {
+        if (ca->heros && e == FOUDRE) {
+            resistance = resistance * (100 + SURCHARGE_POURCENT) / 100;
+        }
         cc->resistance -= resistance;
         if (cc->resistance <= 0) {
             briser(cb, a, c);
+        }
+    }
+
+    /* Effet de l'élément du héros : une fois par cible et par action. */
+    if (ca->heros && estVivant(cc->p) && !(cb->touches & BIT(c))) {
+        cb->touches |= BIT(c);
+        switch (e) {
+        case FEU: {
+            int brulure = attaqueTotale(ca->p) * BRULURE_POURCENT / 100;
+            appliquerDot(cc, brulure < 1 ? 1 : brulure, 2, FEU);
+            ajouterEffet(cb, c, EFFET_MALUS, 0, 0, e, "Brûlure");
+            break;
+        }
+        case GLACE:
+            decalerAction(cc, -GIVRE_RETARD);
+            ajouterEffet(cb, c, EFFET_MALUS, 0, 0, e, "Givre");
+            break;
+        case IMAGINAIRE:
+            if (cc->malusDef <= ILLUSION_DEF) {
+                cc->malusDef = ILLUSION_DEF;
+                if (cc->toursMalusDef < 2) cc->toursMalusDef = 2;
+                ajouterEffet(cb, c, EFFET_MALUS, ILLUSION_DEF, 0, e, "Illusion");
+            }
+            break;
+        default:
+            break; /* physique, foudre, vent, quantique : effet dans le calcul */
         }
     }
     return degats;
@@ -546,17 +713,6 @@ static void soignerCombattant(Combat *cb, int c, int soin, int ranimer)
     ajouterEffet(cb, c, EFFET_SOIN, p->pv - avant, 0, PHYSIQUE, NULL);
 }
 
-static void appliquerDot(Combattant *c, int degats, int tours, enum Element e)
-{
-    if (degats > c->dot) {
-        c->dot = degats;
-    }
-    if (tours > c->toursDot) {
-        c->toursDot = tours;
-    }
-    c->elementDot = e;
-}
-
 /** Termine le tour d'un combattant : durées des effets, nouvelle AV. */
 static void finTour(Combat *cb, int i)
 {
@@ -567,6 +723,9 @@ static void finTour(Combat *cb, int i)
     if (c->toursMalusDef > 0 && --c->toursMalusDef == 0) {
         c->malusDef = 0;
     }
+    if (c->recharge > 0) {
+        c->recharge--;
+    }
     c->av = avDeBase(c);
     cb->tourFini = 1;
     cb->tour++;
@@ -575,6 +734,36 @@ static void finTour(Combat *cb, int i)
 /* ------------------------------------------------------------------ */
 /*  Vagues (mode bots)                                                */
 /* ------------------------------------------------------------------ */
+
+void statsMonstre(enum Monstre m, int etage, double niveauEquipe, int tailleEquipe,
+                  Personnage *p, int *resistance)
+{
+    if (m < 0 || m >= NB_MONSTRES) {
+        m = MONSTRE_GELEE;
+    }
+    if (etage < 1) etage = 1;
+    if (etage > ETAGE_MAX) etage = ETAGE_MAX;
+
+    /* Une petite équipe affronte des monstres un peu moins robustes. */
+    double fTaille = 0.4 + 0.15 * tailleEquipe;
+    if (MONSTRES[m].boss) {
+        fTaille *= fTaille; /* le boss compte double face à une petite équipe */
+    }
+    double fPv = 1.5 * fTaille * (1.0 + 0.35 * (etage - 1)) * (1.0 + 0.12 * (niveauEquipe - 1));
+    double fAtk = (1.3 + 0.11 * (etage - 1)) * (1.0 + 0.08 * (niveauEquipe - 1));
+
+    p->pvMax = (int)(MONSTRES[m].pv * fPv);
+    p->pv = p->pvMax;
+    p->atk = (int)(MONSTRES[m].atk * fAtk);
+    p->def = MONSTRES[m].def + 2 * (etage - 1);
+    p->vit = MONSTRES[m].vit + 2 * (etage - 1);
+    p->classe = GUERRIER;
+    p->element = MONSTRES[m].element;
+    p->niveau = 2 * etage - 2 + (int)niveauEquipe;
+    if (resistance != NULL) {
+        *resistance = MONSTRES[m].resistance + 10 * (etage - 1);
+    }
+}
 
 /** Crée un monstre dans la case `i`, adapté à l'étage et à l'équipe. */
 static void creerMonstre(Combat *cb, int i, enum Monstre m, double niveauEquipe,
@@ -588,32 +777,15 @@ static void creerMonstre(Combat *cb, int i, enum Monstre m, double niveauEquipe,
     c->boss = MONSTRES[m].boss;
     c->phase = 1;
 
-    /* Une petite équipe affronte des monstres un peu moins robustes. */
-    double fTaille = 0.4 + 0.15 * tailleEquipe;
-    if (c->boss) {
-        fTaille *= fTaille; /* le boss compte double face à une petite équipe */
-    }
-    double fPv = 1.5 * fTaille * (1.0 + 0.35 * (cb->etage - 1)) * (1.0 + 0.12 * (niveauEquipe - 1));
-    double fAtk = (1.0 + 0.18 * (cb->etage - 1)) * (1.0 + 0.08 * (niveauEquipe - 1));
-
     Personnage *p = &c->stock;
+    statsMonstre(m, cb->etage, niveauEquipe, tailleEquipe, p, &c->resistanceMax);
     if (suffixe != '\0' && !c->boss) {
         snprintf(p->nom, NOM_MAX, "%s %c", MONSTRES[m].nom, suffixe);
     } else {
         snprintf(p->nom, NOM_MAX, "%s", MONSTRES[m].nom);
     }
-    p->pvMax = (int)(MONSTRES[m].pv * fPv);
-    p->pv = p->pvMax;
-    p->atk = (int)(MONSTRES[m].atk * fAtk);
-    p->def = MONSTRES[m].def + 2 * (cb->etage - 1);
-    p->vit = MONSTRES[m].vit + 2 * (cb->etage - 1);
-    p->classe = GUERRIER;
-    p->element = MONSTRES[m].element;
-    p->niveau = 2 * cb->etage - 2 + (int)niveauEquipe;
-
-    c->resistanceMax = MONSTRES[m].resistance + 10 * (cb->etage - 1);
     c->resistance = c->resistanceMax;
-    c->faiblesses = MONSTRES[m].faiblesses;
+    c->faiblesses = faiblessesMonstre(m);
     c->av = avDeBase(c);
 }
 
@@ -707,7 +879,7 @@ static void placerHeros(Combat *cb, int i, Personnage *p, int copie)
         c->stock.pv = c->stock.pvMax;
         c->p = &c->stock;
         c->resistanceMax = c->resistance = RESISTANCE_DUEL;
-        c->faiblesses = FAIBLESSES_HEROS[p->element];
+        c->faiblesses = elementsFaibles(p->element);
     } else {
         c->p = p;
     }
@@ -782,7 +954,8 @@ int combatPeutAgir(const Combat *cb, int lanceur, enum TypeAction action)
     case ACTION_ULTIME:
         return c->energie >= c->energieMax;
     case ACTION_COMPETENCE:
-        return lanceur == cb->actif && !cb->tourFini && cb->sp[combatCamp(lanceur)] > 0;
+        return lanceur == cb->actif && !cb->tourFini && cb->sp[combatCamp(lanceur)] > 0
+               && c->recharge == 0;
     case ACTION_BASIQUE:
         return lanceur == cb->actif && !cb->tourFini;
     default:
@@ -962,7 +1135,7 @@ static void executerCapacite(Combat *cb, int a, enum TypeAction action, int cibl
         if (!ult) {
             for (int k = 0; k < nbAllies; k++) {
                 Combattant *c = &cb->c[allies[k]];
-                int bouclier = 12 + 3 * p->def;
+                int bouclier = 8 + 2 * p->def;
                 if (bouclier > c->bouclier) {
                     c->bouclier = bouclier;
                 }
@@ -1060,9 +1233,11 @@ int combatJouer(Combat *cb, int lanceur, enum TypeAction action, int cible)
     int *sp = &cb->sp[combatCamp(lanceur)];
     cb->nbEffets = 0;
     cb->nbCoups = 1;
+    cb->touches = 0;
 
-    const Capacite *cap = capaciteClasse(c->p->classe, action);
-    journaliser(cb, "%s : %s", c->p->nom, cap->nom);
+    char nom[64];
+    nomCapacite(c->p, action, nom, sizeof nom);
+    journaliser(cb, "%s : %s", c->p->nom, nom);
 
     switch (action) {
     case ACTION_BASIQUE:
@@ -1074,6 +1249,10 @@ int combatJouer(Combat *cb, int lanceur, enum TypeAction action, int cible)
     case ACTION_COMPETENCE:
         (*sp)--;
         gagnerEnergie(c, ENERGIE_COMPETENCE);
+        /* +1 : le tour en cours (finTour) ne compte pas dans l'attente */
+        if (rechargeCompetence(c->p->classe) > 0) {
+            c->recharge = rechargeCompetence(c->p->classe) + 1;
+        }
         break;
     case ACTION_ULTIME:
         c->energie = 5;
@@ -1086,6 +1265,12 @@ int combatJouer(Combat *cb, int lanceur, enum TypeAction action, int cible)
 
     if (action != ACTION_ULTIME) {
         finTour(cb, lanceur);
+    }
+    /* Vent (Rafale) : chaque attaque avance le prochain tour du héros. */
+    if (c->p->element == VENT && capaciteOffensive(c->p->classe, action) && cb->touches != 0
+        && estVivant(c->p)) {
+        decalerAction(c, RAFALE_AVANCE);
+        ajouterEffet(cb, lanceur, EFFET_BONUS, RAFALE_AVANCE, 0, VENT, "Rafale");
     }
     verifierFin(cb);
     return 1;

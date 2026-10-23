@@ -963,21 +963,44 @@ static void dessinerActions(Gui *g, CombatGui *cg)
             choisir(cg, l, ACTION_COMPETENCE);
         }
         texte(g, POLICE_PETITE, "Basique", 1078, 690, COUL_TEXTE_DOUX, ALIGN_CENTRE);
-        texte(g, POLICE_PETITE, sp > 0 ? "Compétence" : "0 point !", 1186, 682,
-              sp > 0 ? COUL_TEXTE_DOUX : COUL_DANGER, ALIGN_CENTRE);
+        char libComp[32];
+        if (cb->c[l].recharge > 0) {
+            snprintf(libComp, sizeof libComp, "Recharge : %d", cb->c[l].recharge);
+        } else {
+            snprintf(libComp, sizeof libComp, sp > 0 ? "Compétence" : "0 point !");
+        }
+        texte(g, POLICE_PETITE, libComp, 1186, 682,
+              sp > 0 && cb->c[l].recharge == 0 ? COUL_TEXTE_DOUX : COUL_DANGER, ALIGN_CENTRE);
     }
 
-    /* description de l'action choisie */
-    const Capacite *cap = capaciteClasse(cl, cg->choix);
+    /* description de l'action choisie (nom et effet selon l'élément) */
+    const Personnage *pl = cb->c[l].p;
+    char nomCap[64], descCap[256];
+    nomCapacite(pl, cg->choix, nomCap, sizeof nomCap);
+    descriptionCapacite(pl, cg->choix, descCap, sizeof descCap);
     static const char *const TYPES[NB_ACTIONS] = { "Attaque de base", "Compétence", "ULTIME" };
-    float px = 700, py = 606, pw = ult ? 550 : 330, ph = 100;
+    float pw = ult ? 550 : 330, ph = 124;
+    float px = ult ? 700 : 1030 - pw, py = 584;
     rectArrondi(g, px, py, pw, ph, 12, rgba(14, 12, 30, 220));
     contourArrondi(g, px, py, pw, ph, 12, 1.2f, ult ? COUL_OR_CLAIR : COUL_BORDURE);
     char titre[96];
-    snprintf(titre, sizeof titre, "%s — %s", cb->c[l].p->nom, TYPES[cg->choix]);
-    texte(g, POLICE_PETITE, titre, px + 14, py + 10, cc, ALIGN_GAUCHE);
-    texte(g, POLICE_MOYENNE, cap->nom, px + 14, py + 28, COUL_TEXTE, ALIGN_GAUCHE);
-    texteBloc(g, POLICE_PETITE, cap->description, px + 14, py + 56, (int)pw - 28, COUL_TEXTE_DOUX);
+    snprintf(titre, sizeof titre, "%s — %s", pl->nom, TYPES[cg->choix]);
+    texte(g, POLICE_PETITE, titre, px + 14, py + 8, cc, ALIGN_GAUCHE);
+    iconeElement(g, pl->element, px + pw - 20, py + 16, 8);
+    texte(g, POLICE_MOYENNE, nomCap, px + 14, py + 24, COUL_TEXTE, ALIGN_GAUCHE);
+    texteBloc(g, POLICE_PETITE, descCap, px + 14, py + 52, (int)pw - 28, COUL_TEXTE_DOUX);
+
+    /* efficacité contre la cible visée */
+    if (cg->cible >= 0 && capaciteOffensive(pl->classe, cg->choix) && combatVivant(cb, cg->cible)) {
+        int m = multiplicateurElement(pl->element, cb->c[cg->cible].p->element);
+        if (m != 100) {
+            char eff[96];
+            snprintf(eff, sizeof eff, "%s contre %s : %s (%+d %%)", nomElement(pl->element),
+                     nomElement(cb->c[cg->cible].p->element), m > 100 ? "efficace" : "peu efficace", m - 100);
+            texte(g, POLICE_PETITE, eff, px + pw - 14, py + ph - 20, m > 100 ? COUL_VIE : COUL_DANGER,
+                  ALIGN_DROITE);
+        }
+    }
     if (ult) {
         texte(g, POLICE_PETITE, "Espace : lancer  ·  Échap : annuler", px + pw - 14, py + 10,
               COUL_OR_CLAIR, ALIGN_DROITE);
@@ -1060,10 +1083,11 @@ static void dessinerCinematique(Gui *g, CombatGui *cg)
     pose.alpha = a;
     dessinerHeros(g, p, 380 + glisse * 0.5f + t * 40, 640, 2.9f, &pose);
 
-    const Capacite *cap = capaciteClasse(p->classe, ACTION_ULTIME);
+    char nomUlt[64];
+    nomCapacite(p, ACTION_ULTIME, nomUlt, sizeof nomUlt);
     float tx = 700 - (1 - entree) * 200;
     texte(g, POLICE_MOYENNE, p->nom, tx, 240, avecAlpha(COUL_TEXTE, (int)(255 * a)), ALIGN_GAUCHE);
-    texteOmbre(g, POLICE_TITRE, cap->nom, tx, 272, avecAlpha(COUL_OR_CLAIR, (int)(255 * a)), ALIGN_GAUCHE);
+    texteOmbre(g, POLICE_TITRE, nomUlt, tx, 272, avecAlpha(COUL_OR_CLAIR, (int)(255 * a)), ALIGN_GAUCHE);
     texte(g, POLICE_NORMALE, "ULTIME", tx, 334, avecAlpha(ce, (int)(255 * a)), ALIGN_GAUCHE);
 }
 

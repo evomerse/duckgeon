@@ -44,6 +44,17 @@ static const char *const NOMS_ELEMENTS[NB_ELEMENTS] = {
     "Physique", "Feu", "Glace", "Foudre", "Vent", "Quantique", "Imaginaire",
 };
 
+/* Cycle des éléments : chacun est fort contre les deux suivants (et donc
+ * faible contre les deux précédents). Aucun élément n'est avantagé.
+ *   Feu > Glace, Vent         Glace > Vent, Foudre
+ *   Vent > Foudre, Physique   Foudre > Physique, Quantique
+ *   Physique > Quantique, Imaginaire
+ *   Quantique > Imaginaire, Feu
+ *   Imaginaire > Feu, Glace                                          */
+static const enum Element CYCLE_ELEMENTS[NB_ELEMENTS] = {
+    FEU, GLACE, VENT, FOUDRE, PHYSIQUE, QUANTIQUE, IMAGINAIRE,
+};
+
 #define CHANCE_TIR_DOUBLE   20 /* archer, en pourcentage         */
 #define SOIN_PRETRE_POURCENT 10 /* pretre : % des PV max par coup  */
 
@@ -88,6 +99,71 @@ const char *nomElement(enum Element element)
 enum Element elementClasse(enum Classe classe)
 {
     return classeValide(classe) ? STATS_CLASSE[classe].element : PHYSIQUE;
+}
+
+/** Position de l'élément dans le cycle. */
+static int rangCycle(enum Element e)
+{
+    for (int i = 0; i < NB_ELEMENTS; i++) {
+        if (CYCLE_ELEMENTS[i] == e) {
+            return i;
+        }
+    }
+    return 0;
+}
+
+enum Element elementCycle(int rang)
+{
+    return CYCLE_ELEMENTS[((rang % NB_ELEMENTS) + NB_ELEMENTS) % NB_ELEMENTS];
+}
+
+unsigned elementsForts(enum Element e)
+{
+    if (e < PHYSIQUE || e >= NB_ELEMENTS) {
+        return 0;
+    }
+    int r = rangCycle(e);
+    return (1u << CYCLE_ELEMENTS[(r + 1) % NB_ELEMENTS])
+         | (1u << CYCLE_ELEMENTS[(r + 2) % NB_ELEMENTS]);
+}
+
+unsigned elementsFaibles(enum Element e)
+{
+    if (e < PHYSIQUE || e >= NB_ELEMENTS) {
+        return 0;
+    }
+    int r = rangCycle(e);
+    return (1u << CYCLE_ELEMENTS[(r + NB_ELEMENTS - 1) % NB_ELEMENTS])
+         | (1u << CYCLE_ELEMENTS[(r + NB_ELEMENTS - 2) % NB_ELEMENTS]);
+}
+
+int multiplicateurElement(enum Element attaque, enum Element cible)
+{
+    if (elementsForts(attaque) & (1u << cible)) {
+        return ELEMENT_FORT_POURCENT;
+    }
+    if (elementsFaibles(attaque) & (1u << cible)) {
+        return ELEMENT_FAIBLE_POURCENT;
+    }
+    return 100;
+}
+
+void ecrireElements(unsigned masque, char *buf, int taille)
+{
+    if (buf == NULL || taille <= 0) {
+        return;
+    }
+    buf[0] = '\0';
+    int pos = 0;
+    for (int e = 0; e < NB_ELEMENTS && pos < taille; e++) {
+        if (masque & (1u << e)) {
+            pos += snprintf(buf + pos, (size_t)(taille - pos), "%s%s", pos > 0 ? ", " : "",
+                            NOMS_ELEMENTS[e]);
+        }
+    }
+    if (pos == 0) {
+        snprintf(buf, (size_t)taille, "aucun");
+    }
 }
 
 int chanceCritique(const Personnage *p)
@@ -213,6 +289,9 @@ void creerPersonnage(Personnage *p)
     if (p == NULL) {
         return;
     }
+    /* Toute la structure à zéro : aucun octet indéterminé (fin du nom,
+     * remplissage) ne finira dans le fichier de sauvegarde. */
+    memset(p, 0, sizeof *p);
 
     /* Nom : on redemande tant qu'il est vide. */
     do {
@@ -237,6 +316,28 @@ void creerPersonnage(Personnage *p)
     }
 
     initialiserStats(p, (enum Classe)(choix - 1));
+    choisirElement(p);
+}
+
+void choisirElement(Personnage *p)
+{
+    if (p == NULL) {
+        return;
+    }
+    char fort[64], faible[64];
+    printf("Element des attaques (celui de la classe : %s) :\n", nomElement(elementClasse(p->classe)));
+    for (int e = 0; e < NB_ELEMENTS; e++) {
+        ecrireElements(elementsForts((enum Element)e), fort, sizeof fort);
+        ecrireElements(elementsFaibles((enum Element)e), faible, sizeof faible);
+        printf("  %d. %-10s fort contre %-20s faible contre %s%s\n", e + 1,
+               nomElement((enum Element)e), fort, faible,
+               (enum Element)e == p->element ? "  <- actuel" : "");
+    }
+    int choix = lireEntier("Votre choix (0 = garder l'actuel) : ", 0, NB_ELEMENTS);
+    if (choix > 0) {
+        p->element = (enum Element)(choix - 1);
+    }
+    printf("%s attaquera avec l'element %s.\n", p->nom, nomElement(p->element));
 }
 
 void afficherPersonnage(const Personnage *p)
@@ -254,8 +355,8 @@ void afficherPersonnage(const Personnage *p)
     }
     barre[LARGEUR_BARRE] = '\0';
 
-    printf("%-20s %-12s Niv %2d [%s] %3d/%-3d ATK %2d DEF %2d XP %3d/%-3d%s%s\n",
-           p->nom, nomClasse(p->classe), p->niveau, barre, p->pv, p->pvMax,
+    printf("%-20s %-12s %-10s Niv %2d [%s] %3d/%-3d ATK %2d DEF %2d XP %3d/%-3d%s%s\n",
+           p->nom, nomClasse(p->classe), nomElement(p->element), p->niveau, barre, p->pv, p->pvMax,
            attaqueTotale(p), p->def, p->xp, xpPourNiveauSuivant(p),
            estVivant(p) ? "" : " (K.O.)", p->pointsStats > 0 ? " [points a repartir]" : "");
 }
@@ -342,6 +443,21 @@ void attaquer(Personnage *attaquant, Personnage *cible)
         if (degats < 1) {
             degats = 1;
         }
+    }
+
+    /* Affinité des éléments : fort contre l'élément de la cible = +25 %,
+     * faible = -20 %. */
+    int affinite = multiplicateurElement(attaquant->element, cible->element);
+    degats = degats * affinite / 100;
+    if (degats < 1) {
+        degats = 1;
+    }
+    if (affinite > 100) {
+        printf("%s contre %s : c'est super efficace !\n", nomElement(attaquant->element),
+               nomElement(cible->element));
+    } else if (affinite < 100) {
+        printf("%s contre %s : ce n'est pas tres efficace...\n", nomElement(attaquant->element),
+               nomElement(cible->element));
     }
 
     /* Coup critique (voleur 25 %, archer 15 %, autres 5 %) : dégâts x2. */

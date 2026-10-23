@@ -46,6 +46,13 @@ SDL_Color couleurElement(enum Element e);
 /** Petite pastille représentant un élément (rayon r). */
 void iconeElement(Gui *g, enum Element e, float cx, float cy, float r);
 
+/**
+ * « Fort contre [icônes] · Faible contre [icônes] » pour un élément, à
+ * partir de (x, y) : sur une ligne (retourne la largeur) ou en colonne si
+ * `colonne` vaut 1 (retourne la hauteur).
+ */
+float afficherAffinites(Gui *g, enum Element e, float x, float y, int colonne);
+
 /** Dessine un héros, pieds en (x, y), à l'échelle s (1 = ~170 px). */
 void dessinerHeros(Gui *g, const Personnage *p, float x, float y, float s, const Pose *pose);
 

@@ -116,7 +116,10 @@ void ecranMenu(App *app)
     if (bouton(g, bx, by + 198, 320, 50, "Boutique de cosmétiques", BOUTON_NORMAL, 1)) {
         changerEcran(app, ECRAN_BOUTIQUE);
     }
-    if (bouton(g, bx, by + 262, 320, 50, "Quitter", BOUTON_DISCRET, 1)
+    if (bouton(g, bx, by + 262, 320, 50, "Bestiaire et éléments", BOUTON_NORMAL, 1)) {
+        changerEcran(app, ECRAN_BESTIAIRE);
+    }
+    if (bouton(g, bx, by + 326, 320, 50, "Quitter", BOUTON_DISCRET, 1)
         || guiTouche(g, SDLK_ESCAPE)) {
         g->quitter = 1;
     }
@@ -214,6 +217,7 @@ int main(int argc, char *argv[])
         case ECRAN_EQUIPE: ecranPreparation(app); break;
         case ECRAN_COMBAT: ecranCombat(app); break;
         case ECRAN_BOUTIQUE: ecranBoutique(app); break;
+        case ECRAN_BESTIAIRE: ecranBestiaire(app); break;
         }
 
         /* Transition en fondu au noir. */

@@ -12,7 +12,8 @@
 #include "sauvegarde.h"
 
 /** Écrans de l'application. */
-enum Ecran { ECRAN_MENU, ECRAN_HEROS, ECRAN_EDITEUR, ECRAN_EQUIPE, ECRAN_COMBAT, ECRAN_BOUTIQUE };
+enum Ecran { ECRAN_MENU, ECRAN_HEROS, ECRAN_EDITEUR, ECRAN_EQUIPE, ECRAN_COMBAT, ECRAN_BOUTIQUE,
+             ECRAN_BESTIAIRE };
 
 /** Onglets de l'éditeur de personnage. */
 enum OngletEditeur { ONGLET_IDENTITE, ONGLET_APPARENCE, ONGLET_STATS, NB_ONGLETS };
@@ -54,6 +55,10 @@ typedef struct {
     CombatGui *combat;      /**< Alloué au lancement d'un combat          */
     Progression prog;       /**< Étage débloqué, foie gras, cosmétiques   */
     int articleBoutique;    /**< Article sélectionné dans la boutique     */
+    int ongletBestiaire;    /**< 0 : monstres, 1 : table des éléments     */
+    int monstreBestiaire;   /**< Monstre affiché dans le bestiaire        */
+    int etageBestiaire;     /**< Étage pour lequel ses stats sont calculées */
+    int elementBestiaire;   /**< Élément mis en avant dans la table       */
 } App;
 
 /** Demande un changement d'écran (avec fondu). */
@@ -75,6 +80,7 @@ void ecranPreparation(App *app);
 int dansEquipePrep(const Preparation *prep, int equipe, int i);
 void ecranCombat(App *app);
 void ecranBoutique(App *app);
+void ecranBestiaire(App *app);
 
 /** Ouvre l'éditeur sur l'onglet Statistiques pour répartir les points. */
 void ouvrirAmelioration(App *app, int index);

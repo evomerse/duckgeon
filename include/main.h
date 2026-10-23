@@ -7,6 +7,7 @@
 #define MAIN_H
 
 #include "donjon.h"
+#include "sauvegarde.h"
 
 /* ---- Actions du menu ---- */
 
@@ -23,8 +24,12 @@ void menuCreer(Donjon *d);
  */
 int choisirCombattant(const Donjon *d, const char *invite, int exclu);
 
-/** Menu 3 : attaque simple ou combat jusqu'au K.O. entre deux personnages. */
-void menuCombat(Donjon *d);
+/** Menu 3 : choix du combat (exploration, duel en équipe, duel 1 contre 1). */
+void menuCombat(Donjon *d, Progression *prog);
+
+/** Duel classique : attaque simple ou combat jusqu'au K.O. entre deux
+ *  personnages (fonction attaquer() du sujet). */
+void menuDuelSimple(Donjon *d);
 
 /** Menu 4 : sauvegarde le donjon dans FICHIER_SAUVEGARDE. */
 void menuSauvegarder(const Donjon *d);

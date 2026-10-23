@@ -11,9 +11,11 @@
  *    base en rapporte 1, la compétence en coûte 1.
  *  - Énergie : chaque action et chaque coup reçu en donne ; jauge pleine =
  *    ultime, utilisable à tout moment pendant le tour du joueur.
- *  - Faiblesses : frapper un ennemi avec un élément auquel il est faible
- *    réduit sa résistance ; à 0 il est « brisé » (dégâts bonus, action
- *    retardée et effet selon l'élément).
+ *  - Éléments : un élément fort contre celui de la cible fait +25 % de
+ *    dégâts (faible : -20 %) et entame sa résistance ; à 0 la cible est
+ *    « brisée » (dégâts bonus, action retardée et effet selon l'élément).
+ *    Chaque attaque d'un héros porte aussi l'effet de son élément
+ *    (brûlure, givre...) : changer d'élément change ses attaques.
  *
  * Deux modes : contre les bots (vagues de monstres pilotés par une IA) ou
  * duel local (deux équipes de héros sur le même PC). Les cases 0..3 forment
@@ -71,6 +73,31 @@ enum Monstre {
 
 #define ETAGE_POOL_MAX 6
 
+/** Ce que fait l'attaque spéciale d'un monstre. */
+enum SpecialMonstre {
+    SPECIAL_ZONE, SPECIAL_FORT, SPECIAL_RAGE, SPECIAL_TOUS, SPECIAL_POISON,
+    SPECIAL_INVOCATION, /**< appelle un monstre en renfort (Roi des Gelées) */
+    SPECIAL_DRAIN,      /**< frappe tout le monde et se soigne (Liche)       */
+    SPECIAL_NEANT       /**< frappe tout le monde, DEF -30 % (Canard Noir)   */
+};
+
+/** Fiche d'un monstre (bestiaire) : statistiques de base, avant
+ *  l'adaptation à l'étage et à l'équipe (voir statsMonstre). */
+typedef struct {
+    const char *nom;
+    const char *description;   /**< Une phrase d'ambiance                   */
+    int pv, atk, def, vit, resistance;
+    unsigned faiblessesBonus;  /**< Faiblesses en plus de celles de l'élément */
+    enum Element element;
+    const char *attaque;       /**< Attaque normale                         */
+    const char *special;       /**< Attaque spéciale                        */
+    const char *effetSpecial;  /**< Ce que fait l'attaque spéciale          */
+    enum SpecialMonstre typeSpecial;
+    int chanceSpecial;         /**< En %                                    */
+    const char *etat;          /**< Altération infligée (poison...) ou NULL */
+    int boss;
+} InfoMonstre;
+
 /** Description d'un étage du donjon. */
 typedef struct {
     const char *nom;          /**< « Les Caves humides »...               */
@@ -102,6 +129,7 @@ typedef struct {
                            /*   (resistanceMax = 0 : pas de barre)         */
     int brise;             /**< 1 tant que la résistance est brisée        */
 
+    int recharge;          /**< Tours avant de pouvoir relancer la compétence */
     int bouclier;          /**< PV absorbés avant les vrais PV             */
     int buffAtk;           /**< Bonus d'ATK en %                           */
     int toursBuffAtk;
@@ -158,6 +186,9 @@ typedef struct {
 
     char journal[JOURNAL_MAX][JOURNAL_LONGUEUR]; /**< Dernières actions   */
     int nbJournal;
+    int nbJournalTotal;         /**< Lignes écrites depuis le début (console) */
+    unsigned touches;           /**< Cibles déjà marquées par l'élément pendant
+                                     l'action en cours (bit = case)        */
 
     int xpGagnee;               /**< Récompenses (fin de combat)          */
     int pointsGagnes;           /**< Points de stats par survivant        */
@@ -166,14 +197,50 @@ typedef struct {
     char receveurs[4][NOM_MAX];
 } Combat;
 
-/** Retourne la capacité `action` d'une classe. */
+/** Retourne la capacité `action` d'une classe (nom de base, ciblage). */
 const Capacite *capaciteClasse(enum Classe classe, enum TypeAction action);
+
+/** Retourne 1 si l'action frappe des ennemis (et porte donc l'élément). */
+int capaciteOffensive(enum Classe classe, enum TypeAction action);
+
+/** Nom de la capacité pour ce héros : les attaques prennent le nom de son
+ *  élément (« Fendoir de feu », « Météore de givre »...). */
+void nomCapacite(const Personnage *p, enum TypeAction action, char *buf, int taille);
+
+/** Description de la capacité pour ce héros, effet de son élément compris. */
+void descriptionCapacite(const Personnage *p, enum TypeAction action, char *buf, int taille);
+
+/** Nom de l'effet qu'un élément ajoute aux attaques (« Brûlure »...). */
+const char *nomEffetElement(enum Element e);
+
+/** Description courte de cet effet (« 20 % ATK pendant 2 tours »...). */
+const char *effetElement(enum Element e);
+
+/** Tours d'attente après la compétence d'une classe (0 : aucune attente). */
+int rechargeCompetence(enum Classe classe);
 
 /** Nom d'un type de monstre. */
 const char *nomMonstre(enum Monstre m);
 
 /** Retourne 1 si le type de monstre est un boss. */
 int monstreEstBoss(enum Monstre m);
+
+/** Fiche du monstre pour le bestiaire (NULL si invalide). */
+const InfoMonstre *infoMonstre(enum Monstre m);
+
+/** Faiblesses d'un monstre : celles de son élément + ses faiblesses bonus. */
+unsigned faiblessesMonstre(enum Monstre m);
+
+/** Étages où le monstre peut apparaître (bit e-1 pour l'étage e). */
+unsigned etagesMonstre(enum Monstre m);
+
+/**
+ * Statistiques réelles d'un monstre à cet étage, face à une équipe de
+ * `taille` héros de niveau moyen `niveau` (PV max, ATK, DEF, VIT dans
+ * `out`, résistance dans *resistance).
+ */
+void statsMonstre(enum Monstre m, int etage, double niveau, int taille, Personnage *out,
+                  int *resistance);
 
 /** Description de l'étage (1..ETAGE_MAX ; borné si hors limites). */
 const InfoEtage *combatEtage(int etage);

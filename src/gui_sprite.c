@@ -183,6 +183,48 @@ static void pAnneau(const Pinceau *p, float x, float y, float rx, float ry, floa
 /*  Icône d'élément                                                   */
 /* ------------------------------------------------------------------ */
 
+/** Icônes et noms des éléments d'un masque ; retourne la position finale. */
+static float listeElements(Gui *g, unsigned masque, float x, float y)
+{
+    for (int e = 0; e < NB_ELEMENTS; e++) {
+        if (masque & (1u << e)) {
+            iconeElement(g, (enum Element)e, x + 8, y + 9, 7);
+            x += 20 + texte(g, POLICE_PETITE, nomElement((enum Element)e), x + 19, y, COUL_TEXTE, ALIGN_GAUCHE);
+            x += 8;
+        }
+    }
+    return x;
+}
+
+float afficherAffinites(Gui *g, enum Element e, float x, float y, int colonne)
+{
+    if (colonne) {
+        float cy = y;
+        texte(g, POLICE_PETITE, "Fort contre", x, cy, COUL_VIE, ALIGN_GAUCHE);
+        for (int k = 0; k < NB_ELEMENTS; k++) {
+            if (elementsForts(e) & (1u << k)) {
+                cy += 20;
+                listeElements(g, 1u << k, x, cy);
+            }
+        }
+        cy += 26;
+        texte(g, POLICE_PETITE, "Faible contre", x, cy, COUL_DANGER, ALIGN_GAUCHE);
+        for (int k = 0; k < NB_ELEMENTS; k++) {
+            if (elementsFaibles(e) & (1u << k)) {
+                cy += 20;
+                listeElements(g, 1u << k, x, cy);
+            }
+        }
+        return cy + 20 - y;
+    }
+    float cx = x;
+    cx += texte(g, POLICE_PETITE, "Fort contre", cx, y, COUL_VIE, ALIGN_GAUCHE) + 8;
+    cx = listeElements(g, elementsForts(e), cx, y);
+    cx += texte(g, POLICE_PETITE, "Faible contre", cx + 6, y, COUL_DANGER, ALIGN_GAUCHE) + 14;
+    cx = listeElements(g, elementsFaibles(e), cx, y);
+    return cx - x;
+}
+
 void iconeElement(Gui *g, enum Element e, float cx, float cy, float r)
 {
     SDL_Color c = couleurElement(e);

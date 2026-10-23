@@ -164,27 +164,27 @@ static void ongletIdentite(App *app, float x, float y)
     texte(g, POLICE_PETITE, compteur, fx + fw + 10, fy + 14, COUL_TEXTE_DOUX, ALIGN_GAUCHE);
 
     /* classes */
-    float cy = y + 90;
+    float cy = y + 80;
     texte(g, POLICE_NORMALE, "Classe", x, cy, COUL_OR, ALIGN_GAUCHE);
     int creation = ed->index < 0;
     if (!creation) {
         texte(g, POLICE_PETITE, "(fixée après la création)", x + 70, cy + 3, COUL_TEXTE_DOUX, ALIGN_GAUCHE);
     }
     for (int c = 0; c < NB_CLASSES; c++) {
-        float bx = x + (c % 4) * 186, by = cy + 26 + (c / 4) * 64, bw = 176, bh = 56;
+        float bx = x + (c % 4) * 186, by = cy + 26 + (c / 4) * 56, bw = 176, bh = 50;
         int choisie = (b->classe == (enum Classe)c);
         int dessus = creation && survol(g, bx, by, bw, bh);
         SDL_Color cc = couleurClasse((enum Classe)c);
         rectArrondi(g, bx, by, bw, bh, 10, choisie ? avecAlpha(cc, 70) : (dessus ? rgba(50, 44, 90, 240) : rgba(28, 24, 54, 230)));
         contourArrondi(g, bx, by, bw, bh, 10, choisie ? 2.2f : 1, choisie ? cc : COUL_BORDURE);
         iconeElement(g, elementClasse((enum Classe)c), bx + 22, by + bh / 2, 11);
-        texte(g, POLICE_NORMALE, libelleClasse((enum Classe)c), bx + 42, by + 8,
+        texte(g, POLICE_NORMALE, libelleClasse((enum Classe)c), bx + 42, by + 5,
               creation || choisie ? COUL_TEXTE : COUL_TEXTE_DOUX, ALIGN_GAUCHE);
         static const char *const ROLES[NB_CLASSES] = {
             "Dégâts de zone", "Magie de zone", "Critiques, poison", "Tank, boucliers",
             "Rapide, perforant", "Soigneur", "Vol de vie, malus", "Soutien, vitesse",
         };
-        texte(g, POLICE_PETITE, ROLES[c], bx + 42, by + 31, COUL_TEXTE_DOUX, ALIGN_GAUCHE);
+        texte(g, POLICE_PETITE, ROLES[c], bx + 42, by + 27, COUL_TEXTE_DOUX, ALIGN_GAUCHE);
         if (dessus) {
             g->survolCliquable = 1;
             if (g->clic && !choisie) changerClasse(ed, (enum Classe)c);
@@ -192,35 +192,42 @@ static void ongletIdentite(App *app, float x, float y)
     }
 
     /* élément */
-    float ey = cy + 166;
+    float ey = cy + 146;
     texte(g, POLICE_NORMALE, "Élément", x, ey, COUL_OR, ALIGN_GAUCHE);
-    texte(g, POLICE_PETITE, "Type de dégâts : vise les faiblesses ennemies pour briser leur garde.",
-          x + 80, ey + 3, COUL_TEXTE_DOUX, ALIGN_GAUCHE);
+    afficherAffinites(g, b->element, x + 92, ey + 3, 0);
     for (int e = 0; e < NB_ELEMENTS; e++) {
-        float bx = x + e * 105, by = ey + 26, bw = 102, bh = 36;
+        float bx = x + e * 105, by = ey + 24, bw = 102, bh = 32;
         int choisi = (b->element == (enum Element)e);
         int dessus = survol(g, bx, by, bw, bh);
         SDL_Color ce = couleurElement((enum Element)e);
         rectArrondi(g, bx, by, bw, bh, bh / 2, choisi ? avecAlpha(ce, 80) : (dessus ? rgba(50, 44, 90, 240) : rgba(28, 24, 54, 230)));
         contourArrondi(g, bx, by, bw, bh, bh / 2, choisi ? 2 : 1, choisi ? ce : COUL_BORDURE);
         iconeElement(g, (enum Element)e, bx + 15, by + bh / 2, 9);
-        texte(g, POLICE_PETITE, nomElement((enum Element)e), bx + 28, by + 10, COUL_TEXTE, ALIGN_GAUCHE);
+        texte(g, POLICE_PETITE, nomElement((enum Element)e), bx + 28, by + 8, COUL_TEXTE, ALIGN_GAUCHE);
         if (dessus) {
             g->survolCliquable = 1;
             if (g->clic) b->element = (enum Element)e;
         }
     }
 
-    /* capacités de la classe */
-    float ky = ey + 76;
+    /* effet de l'élément sur les attaques */
+    char effet[160];
+    snprintf(effet, sizeof effet, "Effet sur les attaques — %s : %s", nomEffetElement(b->element),
+             effetElement(b->element));
+    texte(g, POLICE_PETITE, effet, x, ey + 62, couleurElement(b->element), ALIGN_GAUCHE);
+
+    /* capacités de la classe (nom selon l'élément) */
+    float ky = ey + 86;
     texte(g, POLICE_NORMALE, "Capacités", x, ky, COUL_OR, ALIGN_GAUCHE);
     texte(g, POLICE_PETITE, descriptionClasse(b->classe), x + 100, ky + 3, COUL_TEXTE_DOUX, ALIGN_GAUCHE);
     static const char *const TYPES[NB_ACTIONS] = { "Basique", "Compétence", "Ultime" };
     for (int a = 0; a < NB_ACTIONS; a++) {
         const Capacite *cap = capaciteClasse(b->classe, (enum TypeAction)a);
-        float ly = ky + 24 + a * 36;
+        char nomCap[64];
+        nomCapacite(b, (enum TypeAction)a, nomCap, sizeof nomCap);
+        float ly = ky + 24 + a * 33;
         texte(g, POLICE_PETITE, TYPES[a], x, ly + 2, couleurClasse(b->classe), ALIGN_GAUCHE);
-        texte(g, POLICE_NORMALE, cap->nom, x + 92, ly, COUL_TEXTE, ALIGN_GAUCHE);
+        texte(g, POLICE_NORMALE, nomCap, x + 92, ly, COUL_TEXTE, ALIGN_GAUCHE);
         texte(g, POLICE_PETITE, cap->description, x + 92, ly + 19, COUL_TEXTE_DOUX, ALIGN_GAUCHE);
     }
 }

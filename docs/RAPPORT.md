@@ -32,7 +32,8 @@ include/saisie.h       saisies clavier sécurisées
 include/sauvegarde.h   sauvegarder / charger (fichier binaire)
 include/objet.h        structure Objet (soin / arme), table de butin
 include/inventaire.h   ajout / retrait / utilisation d'objets
-include/combat.h       moteur de combat en équipe (version graphique)
+include/combat.h       moteur de combat en équipe, éléments, bestiaire (sans SDL)
+include/console_jeu.h  le jeu complet dans le terminal
 include/gui*.h         interface SDL (rendu, sprites, écrans)
 src/personnage.c       creerPersonnage, afficherPersonnage, attaquer, XP, 8 classes
 src/donjon.c           malloc / realloc / free du tableau de personnages
@@ -41,6 +42,7 @@ src/inventaire.c       gestion du sac et de l'arme équipée
 src/saisie.c           lireLigne / lireEntier (fgets + strtol)
 src/sauvegarde.c       fwrite / fread du tableau, vérification du fichier
 src/main.c             menu interactif console
+src/console_jeu.c      exploration, duel en équipe, bestiaire, boutique... en texte
 src/combat.c           tour par tour façon Honkai: Star Rail (sans SDL, testable seul)
 src/gui.c              fenêtre, boucle SDL_PollEvent, texte (cache), widgets
 src/gui_formes.c       formes vectorielles (SDL_RenderGeometry)
@@ -49,11 +51,13 @@ src/gui_main.c         main graphique, écran titre, transitions
 src/gui_heros.c        écrans « Mes héros » et « Préparer l'expédition »
 src/gui_editeur.c      éditeur de personnage
 src/gui_combat.c       écran de combat
+src/gui_bestiaire.c    bestiaire et table des éléments
 ```
 
-La logique métier (`personnage`, `objet`, `inventaire`, `donjon`) est
-compilée telle quelle dans les deux exécutables : l'interface graphique ne
-fait que l'afficher et la piloter.
+La logique métier (`personnage`, `objet`, `inventaire`, `donjon`,
+`sauvegarde`, `boutique`, `combat`) est compilée telle quelle dans les deux
+exécutables : l'interface graphique ne fait que l'afficher et la piloter, et
+le terminal peut jouer à tout le jeu avec le même moteur.
 
 ## Choix réalisés
 
@@ -204,7 +208,8 @@ des indices : la logique métier ne dépend pas de l'affichage.
 - **Faiblesses et rupture** : chaque monstre a des éléments faibles
   (icônes) et une barre de résistance blanche. Frapper avec un élément
   faible la vide ; à zéro le monstre est **brisé** : dégâts bonus, action
-  retardée et effet selon l'élément (brûlure, gel, saignement...).
+  retardée et effet selon l'élément (brûlure, gel, saignement...). Voir
+  aussi la section « Éléments » plus bas.
 - **Ciblage** : un ennemi, une zone (cible + voisins), tous, un allié ou
   toute l'équipe selon la capacité (← → ou clic, Espace pour valider).
 - 3 capacités par classe (24 au total), boucliers, soins, réanimation,
@@ -229,8 +234,7 @@ des indices : la logique métier ne dépend pas de l'affichage.
 - Le Canard Noir est dessiné avec le même code que les héros
   (`dessinerHeros`) et une apparence corrompue.
 - En duel, chaque héros a aussi une barre de résistance et deux faiblesses
-  qui dépendent de son élément (chaque élément est la faiblesse de deux
-  autres, aucun n'est avantagé). Au-delà de 30 actions, la **fatigue**
+  : les deux éléments forts contre le sien. Au-delà de 30 actions, la **fatigue**
   augmente les dégâts de 5 % par action pour qu'un duel entre soigneurs
   finisse toujours.
 - Les PV des héros sont ceux du donjon (pointeurs vers le tableau
@@ -239,6 +243,53 @@ des indices : la logique métier ne dépend pas de l'affichage.
 Commandes : **Q** basique · **E** compétence · **1-4** ultimes · **← →**
 cible · **Espace/Entrée** valider · **Échap** retour/annuler ·
 **F12** capture d'écran (fichier `capture-*.bmp`).
+
+### Éléments
+- **Cycle** (`CYCLE_ELEMENTS`, `personnage.c`) : Feu, Glace, Vent, Foudre,
+  Physique, Quantique, Imaginaire ; chaque élément est **fort** contre les
+  deux suivants et **faible** contre les deux précédents. Aucun élément
+  n'est avantagé, et une seule table suffit à calculer les deux relations
+  (`elementsForts`, `elementsFaibles`, en masques de bits).
+- **Dégâts** : `multiplicateurElement` donne 125 % (fort), 80 % (faible) ou
+  100 %. Il s'applique dans les deux sens (héros et monstres ont un
+  élément), en combat d'équipe comme dans le duel classique de la console
+  (`attaquer`).
+- **Les attaques changent avec l'élément** : `nomCapacite` ajoute l'élément
+  au nom des capacités offensives (*Fendoir de feu*, *Orbe de givre*...) et
+  chaque attaque d'un héros applique l'effet de son élément, une fois par
+  cible et par action (`Combat.touches`) : brûlure (Feu), retard d'action
+  (Glace), garde entamée plus vite (Foudre), tour avancé (Vent), DEF
+  ignorée (Quantique), DEF réduite (Imaginaire), dégâts bonus (Physique).
+- **Faiblesses des monstres** = éléments forts contre le leur, plus
+  quelques faiblesses bonus (`faiblessesMonstre`). Le joueur peut donc les
+  déduire de la table.
+- **Affichage** : fiche du héros (fort / faible contre), éditeur, panneau
+  d'action en combat (« Foudre contre Glace : peu efficace (−20 %) »),
+  bestiaire et table des éléments (avec le schéma du cycle).
+
+### Équilibrage
+- **Bouclier du paladin** : l'*Égide sacrée* protégeait toute l'équipe à
+  chaque tour, si bien qu'aucun dégât ne passait. Elle a maintenant un
+  **temps de recharge de 5 tours du paladin** (`RECHARGE_COMPETENCE`,
+  champ `Combattant.recharge`) et vaut 8 + 2 × DEF au lieu de 12 + 3 × DEF.
+- **Défense contre les bots** : dégâts = `ATK × 100 / (100 + k × DEF)` avec
+  k = 6 entre héros (duel, inchangé) mais **k = 3 quand un monstre frappe
+  un héros**. L'ATK des monstres commence plus haut (×1,3 à l'étage 1) et
+  augmente moins vite (+11 % par étage au lieu de +18 %), pour que les
+  premiers étages fassent mal sans rendre les derniers impossibles.
+- Réglages vérifiés par une campagne simulée (4 héros niveau 1 qui montent
+  les 10 étages en se reposant entre chaque) : les étages 1 et 2 coûtent
+  maintenant 25 à 40 % des PV de l'équipe (contre presque rien avant), les
+  boss gardent des défaites possibles.
+
+### Bestiaire
+- Fiche publique `InfoMonstre` (`combat.h`) : description, statistiques de
+  base, élément, attaques normale et spéciale avec leur effet.
+- `statsMonstre` calcule les vraies statistiques d'un monstre à un étage
+  donné (la même fonction sert à créer les monstres en combat) et
+  `etagesMonstre` liste les étages où il apparaît.
+- Écran *Bestiaire* de Duckgeon (onglets Monstres / Table des éléments) et
+  menus 9 et 10 du terminal.
 
 ### Choix techniques
 - Boucle principale **non bloquante** : `SDL_PollEvent` traite les
@@ -272,6 +323,23 @@ cible · **Espace/Entrée** valider · **Échap** retour/annuler ·
 - **Liste chaînée** : elle remplacerait le tableau `malloc` évalué en Partie 1
   et ne correspond plus à la signature imposée en Partie 2
   (`sauvegarder(..., Personnage *liste, int n)`).
+
+## Le jeu complet dans le terminal (`console_jeu.c`)
+
+- Aucune dépendance graphique : le module n'inclut que `combat.h`,
+  `boutique.h`, `sauvegarde.h`... et se compile dans `./donjon`.
+- Menu du sujet conservé (1 à 5), puis inventaire, amélioration, élément,
+  bestiaire, table des éléments, boutique et repos. *3. Lancer un combat*
+  propose l'exploration des étages, le duel en équipe et le duel classique.
+- Le combat texte pilote le **même moteur** que Duckgeon : affichage des
+  deux camps (barres de PV, énergie, garde, faiblesses, altérations, temps
+  de recharge), ordre des prochains tours, choix de l'action et de la cible
+  (avec l'efficacité de l'élément), puis récit de l'action à partir du
+  journal (`nbJournalTotal`) et de la liste d'effets du moteur.
+- La progression (étages, foie gras, cosmétiques) est partagée avec
+  Duckgeon via `progression.sav`.
+- Sous Windows, `SetConsoleOutputCP(CP_UTF8)` pour les accents des textes
+  du moteur.
 
 ## Questions de réflexion
 
@@ -318,5 +386,15 @@ au compilateur que la fonction ne modifie pas le personnage.
 - Fichier de version 1 relu en version 2 (points à 0), aller-retour v2,
   achats de cosmétiques et progression sous valgrind : aucune erreur.
 - Console : victoire → +1 point, menu 7 → statistique augmentée.
+- Terminal sous valgrind (entrées scriptées) : création avec choix de
+  l'élément, exploration de l'étage 1 jusqu'à la victoire (étage 2
+  débloqué, foie gras gagné), exploration à 3 héros jusqu'à la défaite avec
+  le temps de recharge du paladin (5, 4, 3, 2, 1), duel en équipe jusqu'à
+  la victoire, bestiaire, table des éléments, achat et équipement d'un
+  cosmétique, sauvegarde et chargement : aucune erreur, aucune fuite.
+- Campagne simulée des 10 étages (équipes de 2 et 4 héros) pour régler
+  les dégâts des monstres.
+- Rendus hors écran de Duckgeon (combat, fiche du héros, éditeur,
+  bestiaire, table des éléments) pour vérifier la mise en page.
 - Valgrind : `All heap blocks were freed -- no leaks are possible`,
   `ERROR SUMMARY: 0 errors`.

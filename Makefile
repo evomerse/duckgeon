@@ -8,11 +8,11 @@ SDL_CFLAGS = $(shell pkg-config --cflags sdl2 SDL2_ttf)
 SDL_LIBS   = $(shell pkg-config --libs sdl2 SDL2_ttf) -lm
 
 # Logique métier, partagée par les deux versions
-LOGIQUE = personnage objet inventaire saisie donjon sauvegarde boutique
+LOGIQUE = personnage objet inventaire saisie donjon sauvegarde boutique combat
 # Version console
-CONSOLE = main
+CONSOLE = main console_jeu
 # Version graphique (+ moteur de combat en équipe)
-GUI     = combat gui gui_formes gui_sprite gui_main gui_heros gui_editeur gui_combat gui_boutique
+GUI     = gui gui_formes gui_sprite gui_main gui_heros gui_editeur gui_combat gui_boutique gui_bestiaire
 
 OBJ_LOGIQUE = $(LOGIQUE:%=build/%.o)
 OBJ_CONSOLE = $(CONSOLE:%=build/%.o)

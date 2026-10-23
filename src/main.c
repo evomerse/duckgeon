@@ -1,7 +1,9 @@
 /**
  * @file main.c
  * @brief Le Donjon - Gestion RPG (Parties 1 et 2 : fondamentaux,
- *        sauvegarde / chargement en fichier binaire).
+ *        sauvegarde / chargement en fichier binaire), et le jeu complet
+ *        en mode texte (exploration des étages, duels en équipe,
+ *        bestiaire...) grâce au module console_jeu.
  *
  * Les personnages sont stockés dans un tableau alloué dynamiquement
  * (malloc) dont la capacité double avec realloc quand il est plein
@@ -12,7 +14,13 @@
 #include <stdlib.h>
 #include <time.h>
 
+#ifdef _WIN32
+#include <windows.h> /* SetConsoleOutputCP : accents UTF-8 dans la console */
+#endif
+
 #include "main.h"
+#include "console_jeu.h"
+#include "combat.h"
 #include "personnage.h"
 #include "inventaire.h"
 #include "saisie.h"
@@ -24,7 +32,7 @@ void afficherTous(const Donjon *d)
         printf("Le donjon est vide.\n");
         return;
     }
-    printf("\n #  %-20s %-12s %-6s %-22s %-7s\n", "Nom", "Classe", "Niveau", "Vie", "PV");
+    printf("\n #  %-20s %-12s %-10s %-6s %-22s %-7s\n", "Nom", "Classe", "Element", "Niveau", "Vie", "PV");
     for (int i = 0; i < d->taille; i++) {
         printf("%2d. ", i + 1);
         afficherPersonnage(&d->elements[i]);
@@ -67,7 +75,22 @@ int choisirCombattant(const Donjon *d, const char *invite, int exclu)
     }
 }
 
-void menuCombat(Donjon *d)
+void menuCombat(Donjon *d, Progression *prog)
+{
+    printf("\n--- Lancer un combat ---\n");
+    printf("1. Explorer le donjon (equipe contre monstres, etage %d debloque)\n", prog->etageMax);
+    printf("2. Duel en equipe (2 joueurs sur le meme clavier)\n");
+    printf("3. Duel classique 1 contre 1\n");
+    printf("0. Retour\n");
+    switch (lireEntier("Votre choix : ", 0, 3)) {
+    case 1: menuExplorer(d, prog); break;
+    case 2: menuDuelEquipe(d); break;
+    case 3: menuDuelSimple(d); break;
+    default: break;
+    }
+}
+
+void menuDuelSimple(Donjon *d)
 {
     int vivants = 0;
     for (int i = 0; i < d->taille; i++) {
@@ -208,11 +231,21 @@ void menuAmeliorer(Donjon *d)
 int main(void)
 {
     srand((unsigned)time(NULL)); /* critiques, butin, apparence aleatoire */
+#ifdef _WIN32
+    SetConsoleOutputCP(CP_UTF8);
+#endif
 
     Donjon donjon;
     if (!donjonInit(&donjon)) {
         return EXIT_FAILURE;
     }
+
+    /* Progression du joueur (étages débloqués, foie gras, cosmétiques) :
+     * le même fichier que Duckgeon, enregistré à chaque changement. */
+    Progression prog = { 1, 0, 0, 0 };
+    chargerProgression(FICHIER_PROGRESSION, &prog);
+    if (prog.etageMax < 1) prog.etageMax = 1;
+    if (prog.etageMax > ETAGE_MAX) prog.etageMax = ETAGE_MAX;
 
     int choix;
     do {
@@ -224,17 +257,27 @@ int main(void)
         printf("5. Charger une partie\n");
         printf("6. Inventaire\n");
         printf("7. Ameliorer un personnage (points de stats)\n");
+        printf("8. Changer l'element d'un personnage\n");
+        printf("9. Bestiaire\n");
+        printf("10. Table des elements\n");
+        printf("11. Boutique de cosmetiques (%d foie gras)\n", prog.foieGras);
+        printf("12. Se reposer au camp (soigne tout le monde)\n");
         printf("0. Quitter\n");
-        choix = lireEntier("Votre choix : ", 0, 7);
+        choix = lireEntier("Votre choix : ", 0, 12);
 
         switch (choix) {
         case 1: menuCreer(&donjon); break;
         case 2: afficherTous(&donjon); break;
-        case 3: menuCombat(&donjon); break;
+        case 3: menuCombat(&donjon, &prog); break;
         case 4: menuSauvegarder(&donjon); break;
         case 5: menuCharger(&donjon); break;
         case 6: menuInventaire(&donjon); break;
         case 7: menuAmeliorer(&donjon); break;
+        case 8: menuElement(&donjon); break;
+        case 9: menuBestiaire(); break;
+        case 10: afficherTableElements(); break;
+        case 11: menuBoutique(&donjon, &prog); break;
+        case 12: menuRepos(&donjon); break;
         case 0: printf("A bientot dans le donjon !\n"); break;
         default: choix = 0; break; /* EOF : on quitte proprement */
         }
