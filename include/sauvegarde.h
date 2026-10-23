@@ -14,6 +14,10 @@
  * La version 1 (sans le champ « taille ») est toujours relue : les champs
  * ajoutés depuis (en fin de structure) sont alors mis à 0.
  */
+
+/* [COMMUN] Logique partagée par Donjon (terminal) et Duckgeon (SDL).
+ * Les blocs qui ne servent qu'à une des deux versions sont marqués
+ * [DONJON - terminal] ou [DUCKGEON - SDL]. */
 #ifndef SAUVEGARDE_H
 #define SAUVEGARDE_H
 

@@ -2,6 +2,10 @@
  * @file personnage.c
  * @brief Implémentation du module Personnage.
  */
+
+/* [COMMUN] Logique partagée par Donjon (terminal) et Duckgeon (SDL).
+ * Les blocs qui ne servent qu'à une des deux versions sont marqués
+ * [DONJON - terminal] ou [DUCKGEON - SDL]. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -80,6 +84,7 @@ const char *nomClasse(enum Classe classe)
     return STATS_CLASSE[classe].nom;
 }
 
+/* [DUCKGEON - SDL] */
 const char *descriptionClasse(enum Classe classe)
 {
     if (!classeValide(classe)) {
@@ -139,6 +144,9 @@ unsigned elementsFaibles(enum Element e)
 
 int multiplicateurElement(enum Element attaque, enum Element cible)
 {
+    if (cible < PHYSIQUE || cible >= NB_ELEMENTS) {
+        return 100; /* élément inconnu : pas d'affinité (et pas de décalage hors limites) */
+    }
     if (elementsForts(attaque) & (1u << cible)) {
         return ELEMENT_FORT_POURCENT;
     }
@@ -168,9 +176,10 @@ void ecrireElements(unsigned masque, char *buf, int taille)
 
 int chanceCritique(const Personnage *p)
 {
-    return classeValide(p->classe) ? STATS_CLASSE[p->classe].critique : 0;
+    return p != NULL && classeValide(p->classe) ? STATS_CLASSE[p->classe].critique : 0;
 }
 
+/* [DUCKGEON - SDL] */
 void apparenceAleatoire(Apparence *a)
 {
     if (a == NULL) {
@@ -198,18 +207,29 @@ int estVivant(const Personnage *p)
 
 int attaqueTotale(const Personnage *p)
 {
+    if (p == NULL) {
+        return 0;
+    }
     return p->atk + p->arme.valeur; /* arme vide : valeur 0 */
 }
 
 int xpPourNiveauSuivant(const Personnage *p)
 {
-    return XP_PAR_NIVEAU * p->niveau;
+    if (p == NULL) {
+        return XP_PAR_NIVEAU;
+    }
+    /* Niveau 0 ou négatif (structure pas initialisée) : seuil de 0 XP, la
+     * boucle de gagnerXp() ne s'arrêterait plus. On compte au moins 1. */
+    return XP_PAR_NIVEAU * (p->niveau > 0 ? p->niveau : 1);
 }
 
 void initialiserStats(Personnage *p, enum Classe classe)
 {
     if (p == NULL) {
         return;
+    }
+    if (!classeValide(classe)) {
+        classe = GUERRIER; /* sinon on lirait en dehors de STATS_CLASSE */
     }
     p->classe = classe;
     p->pvMax = STATS_CLASSE[classe].pv;
@@ -254,6 +274,7 @@ void gagnerXp(Personnage *p, int xp)
     }
 }
 
+/* [DUCKGEON - SDL] */
 void imposerNiveau(Personnage *p, int niveau)
 {
     if (p == NULL || niveau < 1) {
@@ -305,6 +326,7 @@ int ameliorerStat(Personnage *p, enum Stat s)
     return 1;
 }
 
+/* [DONJON - terminal] */
 void creerPersonnage(Personnage *p)
 {
     if (p == NULL) {
@@ -340,6 +362,7 @@ void creerPersonnage(Personnage *p)
     choisirElement(p);
 }
 
+/* [DONJON - terminal] */
 void choisirElement(Personnage *p)
 {
     if (p == NULL) {
@@ -361,6 +384,7 @@ void choisirElement(Personnage *p)
     printf("%s attaquera avec l'element %s.\n", p->nom, nomElement(p->element));
 }
 
+/* [DONJON - terminal] */
 void afficherPersonnage(const Personnage *p)
 {
     if (p == NULL) {
@@ -369,7 +393,10 @@ void afficherPersonnage(const Personnage *p)
 
     /* Petite barre de vie texte : 20 cases proportionnelles aux PV. */
     enum { LARGEUR_BARRE = 20 };
-    int remplies = p->pv * LARGEUR_BARRE / p->pvMax;
+    /* pvMax à 0 (personnage pas initialisé) = division par zéro, le
+     * programme planterait : on affiche alors une barre vide. */
+    int remplies = p->pvMax > 0 ? p->pv * LARGEUR_BARRE / p->pvMax : 0;
+    if (remplies < 0) remplies = 0;
     char barre[LARGEUR_BARRE + 1];
     for (int i = 0; i < LARGEUR_BARRE; i++) {
         barre[i] = (i < remplies) ? '#' : '.';
@@ -382,6 +409,9 @@ void afficherPersonnage(const Personnage *p)
            estVivant(p) ? "" : " (K.O.)", p->pointsStats > 0 ? " [points a repartir]" : "");
 }
 
+/* [DONJON - terminal] Duel classique du sujet : attaquer() et ses petits
+ * outils jusqu'à la fin du fichier. Duckgeon ne s'en sert pas, ses combats
+ * passent par le moteur de combat.c. */
 /** Récompense l'attaquant qui vient de mettre la cible K.O. */
 static void recompenserVictoire(Personnage *vainqueur, const Personnage *vaincu)
 {
@@ -418,6 +448,9 @@ static void infligerCoup(Personnage *attaquant, Personnage *cible, int degats,
 /** Soigne p de soin PV sans dépasser son maximum ; retourne le gain réel. */
 static int soigner(Personnage *p, int soin)
 {
+    if (soin <= 0) {
+        return 0;
+    }
     int avant = p->pv;
     p->pv += soin;
     if (p->pv > p->pvMax) {

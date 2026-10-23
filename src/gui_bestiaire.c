@@ -6,6 +6,8 @@
  * Toutes les données viennent du moteur de combat (infoMonstre,
  * statsMonstre, elementsForts...) : l'écran ne fait que les afficher.
  */
+
+/* [DUCKGEON - SDL] Fichier de la version graphique (./duckgeon) uniquement. */
 #include <math.h>
 #include <stdio.h>
 

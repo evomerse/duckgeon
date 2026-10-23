@@ -2,13 +2,15 @@
  * @file console_jeu.h
  * @brief Le jeu complet dans le terminal, sans aucune interface graphique :
  *        exploration des étages en équipe, duel en équipe, bestiaire,
- *        table des éléments, boutique, changement d'élément et repos.
+ *        table des éléments, changement d'élément et repos.
  *
  * Ce module utilise le même moteur de combat (combat.h) et les mêmes
  * fichiers de sauvegarde que Duckgeon : on peut commencer une partie dans
  * le terminal et la continuer dans l'interface graphique, et inversement.
  * Il n'inclut rien de SDL.
  */
+
+/* [DONJON - terminal] Fichier de la version terminal (./donjon) uniquement. */
 #ifndef CONSOLE_JEU_H
 #define CONSOLE_JEU_H
 
@@ -33,9 +35,6 @@ void menuBestiaire(void);
 
 /** Table des éléments : effet sur les attaques, forces et faiblesses. */
 void afficherTableElements(void);
-
-/** Boutique : acheter des cosmétiques avec le foie gras et les équiper. */
-void menuBoutique(Donjon *d, Progression *prog);
 
 /** Change l'élément des attaques d'un personnage. */
 void menuElement(Donjon *d);

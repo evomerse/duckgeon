@@ -7,6 +7,10 @@
  * achetés appartiennent au joueur (structure Progression), pas à un héros :
  * un cosmétique débloqué est utilisable par tous les héros.
  */
+
+/* [COMMUN] Logique partagée par Donjon (terminal) et Duckgeon (SDL).
+ * Les blocs qui ne servent qu'à une des deux versions sont marqués
+ * [DONJON - terminal] ou [DUCKGEON - SDL]. */
 #ifndef BOUTIQUE_H
 #define BOUTIQUE_H
 
@@ -29,6 +33,7 @@ typedef struct {
 /** Bonus de foie gras la première fois qu'un étage est terminé. */
 #define FOIE_GRAS_PREMIER_PASSAGE 25
 
+/* [DUCKGEON - SDL] Catalogue et achats : seulement la boutique de Duckgeon. */
 /** Article d'indice i (0..NB_COSMETIQUES-1), NULL si invalide. */
 const Cosmetique *cosmetique(int i);
 
@@ -48,6 +53,7 @@ int optionDebloquee(const Progression *prog, enum TypeCosmetique type, int valeu
  */
 int acheterCosmetique(Progression *prog, int i);
 
+/* [COMMUN] Récompense d'étage, terminal et SDL. */
 /**
  * Foie gras gagné en terminant l'étage `etage` (le bonus de premier
  * passage est compté et l'étage est marqué comme terminé).

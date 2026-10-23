@@ -6,6 +6,8 @@
  * Toute la logique (prix, achat, déblocage) est dans boutique.c ; cet
  * écran ne fait que l'afficher et la piloter.
  */
+
+/* [DUCKGEON - SDL] Fichier de la version graphique (./duckgeon) uniquement. */
 #include <stdio.h>
 
 #include "gui_app.h"

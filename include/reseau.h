@@ -11,6 +11,8 @@
  * avance la connexion et range les messages reçus dans une file.
  * Fonctionne avec les sockets POSIX (Linux, macOS) et Winsock (Windows).
  */
+
+/* [DUCKGEON - SDL] Fichier de la version graphique (./duckgeon) uniquement. */
 #ifndef RESEAU_H
 #define RESEAU_H
 

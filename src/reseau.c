@@ -11,6 +11,8 @@
  * presque pareil ; les quelques différences sont regroupées juste en
  * dessous (fermeture, mode non bloquant, codes d'erreur, adresses locales).
  */
+
+/* [DUCKGEON - SDL] Fichier de la version graphique (./duckgeon) uniquement. */
 #ifdef _WIN32
 #  ifndef _WIN32_WINNT
 #    define _WIN32_WINNT 0x0600 /* Vista et plus : inet_ntop */

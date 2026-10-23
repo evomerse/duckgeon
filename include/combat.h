@@ -24,6 +24,10 @@
  * Ce module ne fait aucun affichage : il décrit chaque action par une
  * liste d'effets que l'interface anime.
  */
+
+/* [COMMUN] Logique partagée par Donjon (terminal) et Duckgeon (SDL).
+ * Les blocs qui ne servent qu'à une des deux versions sont marqués
+ * [DONJON - terminal] ou [DUCKGEON - SDL]. */
 #ifndef COMBAT_H
 #define COMBAT_H
 
@@ -262,6 +266,7 @@ int combatInit(Combat *cb, Personnage *equipe[], int n, int etage);
  */
 int combatInitDuel(Combat *cb, Personnage *equipe1[], int n1, Personnage *equipe2[], int n2);
 
+/* [DUCKGEON - SDL] */
 /** Fixe la graine du hasard du combat (critiques, dégâts...). Deux combats
  *  initialisés pareil et de même graine se déroulent à l'identique si on
  *  leur fait jouer les mêmes actions : c'est ce qu'utilise le duel en ligne. */
@@ -290,6 +295,7 @@ int combatCibleValide(const Combat *cb, int lanceur, enum TypeAction action, int
 /** Première cible valide (ennemi ou allié selon l'action), -1 sinon. */
 int combatCibleParDefaut(const Combat *cb, int lanceur, enum TypeAction action);
 
+/* [DUCKGEON - SDL] */
 /** Retourne 1 si `i` est touché par l'action visant `cible` (zone). */
 int combatEstTouche(const Combat *cb, int lanceur, enum TypeAction action,
                     int cible, int i);

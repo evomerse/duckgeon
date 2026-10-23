@@ -3,6 +3,8 @@
  * @brief Formes vectorielles dessinées avec SDL_RenderGeometry (triangles
  *        colorés) : cercles, ellipses, arcs, polygones, dégradés.
  */
+
+/* [DUCKGEON - SDL] Fichier de la version graphique (./duckgeon) uniquement. */
 #include <math.h>
 
 #include "gui.h"

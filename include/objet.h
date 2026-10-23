@@ -2,6 +2,10 @@
  * @file objet.h
  * @brief Objets ramassables par les personnages (soins et armes).
  */
+
+/* [COMMUN] Logique partagée par Donjon (terminal) et Duckgeon (SDL).
+ * Les blocs qui ne servent qu'à une des deux versions sont marqués
+ * [DONJON - terminal] ou [DUCKGEON - SDL]. */
 #ifndef OBJET_H
 #define OBJET_H
 
@@ -23,6 +27,7 @@ Objet objetAleatoire(void);
 /** Retourne l'objet de départ donné à chaque nouveau personnage. */
 Objet objetDepart(void);
 
+/* [DONJON - terminal] */
 /** Affiche un objet sur une ligne (sans retour à la ligne final). */
 void afficherObjet(const Objet *o);
 

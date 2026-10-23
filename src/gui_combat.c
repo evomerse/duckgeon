@@ -17,6 +17,8 @@
  * Le moteur (combat.c) applique chaque action immédiatement et renvoie la
  * liste de ses effets ; ce module se contente de les mettre en scène.
  */
+
+/* [DUCKGEON - SDL] Fichier de la version graphique (./duckgeon) uniquement. */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>

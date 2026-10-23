@@ -6,6 +6,8 @@
  * ne fait qu'afficher l'état du combat, demander les actions au clavier et
  * raconter ce qui se passe (journal du moteur + liste des effets).
  */
+
+/* [DONJON - terminal] Fichier de la version terminal (./donjon) uniquement. */
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -547,6 +549,9 @@ static void afficherEtages(const Progression *prog)
 
 void menuExplorer(Donjon *d, Progression *prog)
 {
+    if (d == NULL || prog == NULL) {
+        return;
+    }
     if (compterVivants(d) == 0) {
         printf("Aucun personnage en etat de combattre : reposez-vous d'abord.\n");
         return;
@@ -614,6 +619,9 @@ void menuExplorer(Donjon *d, Progression *prog)
 
 void menuDuelEquipe(Donjon *d)
 {
+    if (d == NULL) {
+        return;
+    }
     if (d->taille == 0) {
         printf("Le donjon est vide.\n");
         return;
@@ -723,63 +731,14 @@ void afficherTableElements(void)
 }
 
 /* ------------------------------------------------------------------ */
-/*  Boutique, élément, repos                                          */
+/*  Élément, repos                                                    */
 /* ------------------------------------------------------------------ */
-
-void menuBoutique(Donjon *d, Progression *prog)
-{
-    for (;;) {
-        printf("\n=== Boutique de cosmetiques === (%d foie gras)\n", prog->foieGras);
-        printf("Les cosmetiques changent l'apparence des heros dans Duckgeon (version graphique).\n");
-        for (int i = 0; i < NB_COSMETIQUES; i++) {
-            const Cosmetique *c = cosmetique(i);
-            printf(" %d. %-20s %-8s ", i + 1, c->nom, c->type == COSMETIQUE_COIFFE ? "coiffe" : "plumage");
-            if (cosmetiqueAchete(prog, i)) {
-                printf("achete\n");
-            } else {
-                printf("%3d foie gras%s\n", c->prix, prog->foieGras >= c->prix ? "" : " (trop cher)");
-            }
-        }
-        printf("1. Acheter  2. Equiper sur un heros  0. Retour\n");
-        int action = lireEntier("Votre choix : ", 0, 2);
-        if (action <= 0) {
-            return;
-        }
-        int i = lireEntier("Article (numero) : ", 1, NB_COSMETIQUES);
-        if (i == -1) {
-            return;
-        }
-        const Cosmetique *c = cosmetique(i - 1);
-        if (action == 1) {
-            if (acheterCosmetique(prog, i - 1)) {
-                printf("%s debloque !\n", c->nom);
-                sauvegarderProgression(FICHIER_PROGRESSION, prog);
-            } else {
-                printf(cosmetiqueAchete(prog, i - 1) ? "Deja achete.\n" : "Pas assez de foie gras.\n");
-            }
-        } else if (!cosmetiqueAchete(prog, i - 1)) {
-            printf("Achetez d'abord cet article.\n");
-        } else if (d->taille == 0) {
-            printf("Le donjon est vide.\n");
-        } else {
-            listerPersonnages(d);
-            int h = lireEntier("Heros (numero) : ", 1, d->taille);
-            if (h == -1) {
-                return;
-            }
-            Personnage *p = &d->elements[h - 1];
-            if (c->type == COSMETIQUE_COIFFE) {
-                p->apparence.coiffe = c->valeur;
-            } else {
-                p->apparence.plumage = c->valeur;
-            }
-            printf("%s porte maintenant : %s.\n", p->nom, c->nom);
-        }
-    }
-}
 
 void menuElement(Donjon *d)
 {
+    if (d == NULL) {
+        return;
+    }
     if (d->taille == 0) {
         printf("Le donjon est vide.\n");
         return;
@@ -804,6 +763,9 @@ void menuElement(Donjon *d)
 
 void menuRepos(Donjon *d)
 {
+    if (d == NULL) {
+        return;
+    }
     for (int i = 0; i < d->taille; i++) {
         d->elements[i].pv = d->elements[i].pvMax;
     }

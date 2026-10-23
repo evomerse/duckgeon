@@ -7,6 +7,8 @@
  * que celle de la version console ; ce programme ne fait que l'afficher et
  * la piloter à la souris et au clavier.
  */
+
+/* [DUCKGEON - SDL] Fichier de la version graphique (./duckgeon) uniquement. */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>

@@ -6,6 +6,8 @@
  * haut négatif, regard vers +x) puis transformé par un « pinceau » qui
  * applique position, échelle, miroir (sens), flash et transparence.
  */
+
+/* [DUCKGEON - SDL] Fichier de la version graphique (./duckgeon) uniquement. */
 #include <math.h>
 #include <string.h>
 

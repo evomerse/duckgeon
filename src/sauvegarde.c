@@ -3,6 +3,10 @@
  * @brief Sauvegarde et chargement des personnages et de la progression
  *        (fichiers binaires).
  */
+
+/* [COMMUN] Logique partagée par Donjon (terminal) et Duckgeon (SDL).
+ * Les blocs qui ne servent qu'à une des deux versions sont marqués
+ * [DONJON - terminal] ou [DUCKGEON - SDL]. */
 #include <stddef.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -98,6 +102,16 @@ static void verifierPersonnage(Personnage *p)
     a->plumage %= NB_PLUMAGES;
     a->coupe %= NB_COUPES;
     a->coiffe %= NB_COIFFES;
+    a->couleurCheveux %= NB_COULEURS;
+    a->couleurYeux %= NB_COULEURS;
+    a->regard %= NB_REGARDS;
+    a->tenue %= NB_COULEURS;
+    a->tenue2 %= NB_COULEURS;
+    a->pilosite %= NB_PILOSITES;
+    a->marque %= NB_MARQUES;
+    a->cape %= 2;
+    a->aura %= NB_COULEURS + 1;
+    a->corpulence %= NB_CORPULENCES;
 }
 
 int chargerFichier(const char *nomFichier, Personnage **liste, int *n)
@@ -168,6 +182,9 @@ void charger(const char *nomFichier, Personnage **liste, int *n)
 
 int sauvegardeExiste(const char *nomFichier)
 {
+    if (nomFichier == NULL) {
+        return 0;
+    }
     FILE *f = fopen(nomFichier, "rb");
     if (f == NULL) {
         return 0;
@@ -182,6 +199,9 @@ int sauvegardeExiste(const char *nomFichier)
 
 int sauvegarderProgression(const char *nomFichier, const Progression *prog)
 {
+    if (nomFichier == NULL || prog == NULL) {
+        return 0;
+    }
     FILE *f = fopen(nomFichier, "wb");
     if (f == NULL) {
         perror(nomFichier);
@@ -200,6 +220,9 @@ int sauvegarderProgression(const char *nomFichier, const Progression *prog)
 
 int chargerProgression(const char *nomFichier, Progression *prog)
 {
+    if (nomFichier == NULL || prog == NULL) {
+        return 0;
+    }
     FILE *f = fopen(nomFichier, "rb");
     if (f == NULL) {
         return 0; /* pas encore de progression : ce n'est pas une erreur */

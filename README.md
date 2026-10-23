@@ -179,8 +179,7 @@ suivantes donnent accès au reste du jeu.
 8. Changer l'element d'un personnage
 9. Bestiaire
 10. Table des elements
-11. Boutique de cosmetiques (32 foie gras)
-12. Se reposer au camp (soigne tout le monde)
+11. Se reposer au camp (soigne tout le monde)
 0. Quitter
 ```
 
@@ -225,12 +224,18 @@ Votre choix (0 = retour) : 1
      Loup sombre A : Givre
 ```
 
-- La progression (étages débloqués, foie gras, cosmétiques) est enregistrée
+- La progression (étages débloqués, foie gras) est enregistrée
   automatiquement dans `progression.sav`. Les héros s'enregistrent avec le
   menu 4.
-- Les cosmétiques achetés dans le terminal sont visibles dans Duckgeon.
-- **Saisies robustes** : `abc`, ligne vide ou nombre hors limites sont refusés,
-  et `Ctrl+D` quitte proprement.
+- Pas de boutique de cosmétiques dans le terminal : le foie gras gagné ici
+  se dépense dans la boutique de Duckgeon.
+- **Saisies robustes** : `abc`, ligne vide, octet nul ou nombre hors limites
+  sont refusés, et `Ctrl+D` quitte proprement.
+- **Code protégé contre `NULL` et 0** : chaque fonction publique vérifie ses
+  pointeurs (un `NULL` ne fait rien au lieu de planter), aucune division par
+  un maximum qui vaut 0 (`pvMax`), un donjon à capacité 0 repart de la
+  capacité initiale, et un fichier de sauvegarde modifié à la main est
+  corrigé au chargement.
 - Sous Windows, la console passe en UTF-8 pour afficher les accents.
 
 
@@ -593,7 +598,7 @@ flowchart TD
 ```
 include/                         src/
 ├── main.h         ─────────────  main.c         menu du sujet, duel classique 1 contre 1
-├── console_jeu.h  ─────────────  console_jeu.c  exploration, duel en équipe, bestiaire, boutique
+├── console_jeu.h  ─────────────  console_jeu.c  exploration, duel en équipe, bestiaire
 ├── saisie.h       ─────────────  saisie.c       saisies clavier sûres (pas de scanf brut)
 ├── personnage.h   ─────────────  personnage.c   héros, classes, attaquer(), XP, points de stats
 ├── objet.h        ─────────────  objet.c        objets et table de butin
@@ -1251,7 +1256,7 @@ flowchart LR
 | **Données**             | Même `struct Personnage`, même tableau dynamique `Donjon`, même `Progression` : le MCD de la partie 1 vaut pour les deux. |
 | **Règles**              | Mêmes classes, éléments, étages, monstres, boss, XP, points de stats, foie gras et boutique (règles RG1 à RG11). |
 | **Moteur de combat**    | `combat.c` fait tourner l'exploration et les duels en équipe dans les deux programmes. |
-| **Sauvegardes**         | Mêmes fichiers : une partie commencée dans le terminal se continue dans Duckgeon, et inversement. Les cosmétiques achetés d'un côté se voient de l'autre. |
+| **Sauvegardes**         | Mêmes fichiers : une partie commencée dans le terminal se continue dans Duckgeon, et inversement. Le foie gras gagné dans le terminal se dépense dans la boutique de Duckgeon (la boutique n'existe que là). |
 | **Code compilé**        | Les modules de logique sont compilés une fois (`build/*.o`) et liés aux deux exécutables (voir le `Makefile`). |
 
 ### Ce qui change

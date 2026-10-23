@@ -39,10 +39,10 @@ src/personnage.c       creerPersonnage, afficherPersonnage, attaquer, XP, 8 clas
 src/donjon.c           malloc / realloc / free du tableau de personnages
 src/objet.c            butin aléatoire, affichage d'un objet
 src/inventaire.c       gestion du sac et de l'arme équipée
-src/saisie.c           lireLigne / lireEntier (fgets + strtol)
+src/saisie.c           lireLigne / lireEntier (getchar + strtol)
 src/sauvegarde.c       fwrite / fread du tableau, vérification du fichier
 src/main.c             menu interactif console
-src/console_jeu.c      exploration, duel en équipe, bestiaire, boutique... en texte
+src/console_jeu.c      exploration, duel en équipe, bestiaire... en texte
 src/combat.c           tour par tour façon Honkai: Star Rail (sans SDL, testable seul)
 src/gui.c              fenêtre, boucle SDL_PollEvent, texte (cache), widgets
 src/gui_formes.c       formes vectorielles (SDL_RenderGeometry)
@@ -88,9 +88,16 @@ le terminal peut jouer à tout le jeu avec le même moteur.
   doublement par `realloc` quand il est plein. Le résultat de `realloc`
   passe par un pointeur temporaire pour ne pas perdre l'ancien bloc en cas
   d'échec. Un seul `free` à la fin, puis le pointeur est remis à `NULL`.
-- **Saisies robustes** : `fgets` + `strtol` au lieu de `scanf`, donc une
-  saisie comme `abc` est refusée proprement au lieu de faire boucler le
-  programme. La fin d'entrée (Ctrl+D) quitte proprement en libérant la mémoire.
+- **Saisies robustes** : lecture de la ligne caractère par caractère
+  (`getchar`) + `strtol` au lieu de `scanf`, donc une saisie comme `abc` ou
+  un octet nul est refusée proprement au lieu de faire boucler le programme.
+  La fin d'entrée (Ctrl+D) quitte proprement en libérant la mémoire.
+- **Protection contre `NULL` et 0** : toutes les fonctions publiques
+  vérifient leurs pointeurs avant de s'en servir, `afficherPersonnage` ne
+  divise plus par un `pvMax` nul, `donjonNouvelleCase` repart de
+  `CAPACITE_INITIALE` quand la capacité vaut 0 (0 × 2 = 0 faisait écrire
+  hors du tableau), `xpPourNiveauSuivant` compte au moins le niveau 1, et
+  le chargement corrige toute valeur hors limites d'un fichier modifié.
 - **Combat** : vérifie qu'il y a au moins 2 personnages vivants, interdit
   de s'attaquer soi-même ou d'utiliser un personnage K.O.
 - **Fonctionnalités supplémentaires** : capacités spéciales par classe,
@@ -341,15 +348,17 @@ cible · **Espace/Entrée** valider · **Échap** retour/annuler ·
 - Aucune dépendance graphique : le module n'inclut que `combat.h`,
   `boutique.h`, `sauvegarde.h`... et se compile dans `./donjon`.
 - Menu du sujet conservé (1 à 5), puis inventaire, amélioration, élément,
-  bestiaire, table des éléments, boutique et repos. *3. Lancer un combat*
+  bestiaire, table des éléments et repos (la boutique de cosmétiques
+  n'existe que dans Duckgeon). *3. Lancer un combat*
   propose l'exploration des étages, le duel en équipe et le duel classique.
 - Le combat texte pilote le **même moteur** que Duckgeon : affichage des
   deux camps (barres de PV, énergie, garde, faiblesses, altérations, temps
   de recharge), ordre des prochains tours, choix de l'action et de la cible
   (avec l'efficacité de l'élément), puis récit de l'action à partir du
   journal (`nbJournalTotal`) et de la liste d'effets du moteur.
-- La progression (étages, foie gras, cosmétiques) est partagée avec
-  Duckgeon via `progression.sav`.
+- La progression (étages, foie gras) est partagée avec Duckgeon via
+  `progression.sav` : le foie gras gagné dans le terminal se dépense dans
+  la boutique de Duckgeon.
 - Sous Windows, `SetConsoleOutputCP(CP_UTF8)` pour les accents des textes
   du moteur.
 

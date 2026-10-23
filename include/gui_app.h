@@ -3,6 +3,8 @@
  * @brief État de l'application graphique et fonctions des différents
  *        écrans (menu, héros, éditeur, préparation, combat).
  */
+
+/* [DUCKGEON - SDL] Fichier de la version graphique (./duckgeon) uniquement. */
 #ifndef GUI_APP_H
 #define GUI_APP_H
 

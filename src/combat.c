@@ -3,6 +3,10 @@
  * @brief Implémentation du combat en équipe façon Honkai: Star Rail
  *        (mode bots et duel local).
  */
+
+/* [COMMUN] Logique partagée par Donjon (terminal) et Duckgeon (SDL).
+ * Les blocs qui ne servent qu'à une des deux versions sont marqués
+ * [DONJON - terminal] ou [DUCKGEON - SDL]. */
 #include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -143,6 +147,13 @@ int rechargeCompetence(enum Classe classe)
 
 void nomCapacite(const Personnage *p, enum TypeAction action, char *buf, int taille)
 {
+    if (buf == NULL || taille <= 0) {
+        return;
+    }
+    if (p == NULL) {
+        buf[0] = '\0';
+        return;
+    }
     const Capacite *cap = capaciteClasse(p->classe, action);
     if (capaciteOffensive(p->classe, action) && elementValide(p->element)) {
         snprintf(buf, (size_t)taille, "%s %s", cap->nom, ELEMENTS_ATTAQUE[p->element].qualificatif);
@@ -153,6 +164,13 @@ void nomCapacite(const Personnage *p, enum TypeAction action, char *buf, int tai
 
 void descriptionCapacite(const Personnage *p, enum TypeAction action, char *buf, int taille)
 {
+    if (buf == NULL || taille <= 0) {
+        return;
+    }
+    if (p == NULL) {
+        buf[0] = '\0';
+        return;
+    }
     const Capacite *cap = capaciteClasse(p->classe, action);
     int pos = snprintf(buf, (size_t)taille, "%s", cap->description);
     if (pos < taille && capaciteOffensive(p->classe, action) && elementValide(p->element)) {
@@ -319,7 +337,7 @@ unsigned etagesMonstre(enum Monstre m)
 
 int combatFatigue(const Combat *cb)
 {
-    if (cb->mode != MODE_DUEL || cb->tour <= TOURS_AVANT_FATIGUE) {
+    if (cb == NULL || cb->mode != MODE_DUEL || cb->tour <= TOURS_AVANT_FATIGUE) {
         return 0;
     }
     return (cb->tour - TOURS_AVANT_FATIGUE) * 5;
@@ -341,13 +359,16 @@ static int finCamp(int camp) { return camp == 0 ? PREMIER_ENNEMI : COMBAT_MAX; }
 
 int combatVivant(const Combat *cb, int i)
 {
-    return i >= 0 && i < COMBAT_MAX && cb->c[i].present && estVivant(cb->c[i].p);
+    return cb != NULL && i >= 0 && i < COMBAT_MAX && cb->c[i].present && estVivant(cb->c[i].p);
 }
 
 /** Durée entre deux tours d'un combattant (plus il est rapide, plus elle
  *  est courte). */
 static double avDeBase(const Combattant *c)
 {
+    if (c->p == NULL) {
+        return AV_BASE;
+    }
     int vit = c->p->vit > 0 ? c->p->vit : 1;
     return AV_BASE / vit;
 }
@@ -452,8 +473,13 @@ static double aleatoire(Combat *cb, double a, double b)
     return a + (b - a) * (tirerBrut(cb) / 4294967295.0);
 }
 
+/* [DUCKGEON - SDL] Graine imposée : sert au duel en ligne (les deux PC
+ * tirent les mêmes nombres). */
 void combatGraine(Combat *cb, unsigned graine)
 {
+    if (cb == NULL) {
+        return;
+    }
     cb->graine = graine ? graine : 1;
 }
 
@@ -578,7 +604,12 @@ static int calculerDegats(Combat *cb, int a, int c, int pourcent, int *critique)
      * équipe un peu montée en niveau ne prenait presque plus de dégâts.
      * Entre héros (duel), la formule reste la même. */
     double poidsDef = (!ca->heros && cc->heros) ? POIDS_DEF_HEROS_PVE : POIDS_DEF;
-    double degats = atk * pourcent / 100.0 * 100.0 / (100.0 + poidsDef * def);
+    /* DEF très négative : le diviseur pourrait valoir 0 (ou moins). */
+    double diviseur = 100.0 + poidsDef * def;
+    if (diviseur < 1.0) {
+        diviseur = 1.0;
+    }
+    double degats = atk * pourcent / 100.0 * 100.0 / diviseur;
 
     /* Affinité : fort contre l'élément de la cible +25 %, faible -20 %. */
     degats *= multiplicateurElement(ca->p->element, cc->p->element) / 100.0;
@@ -907,13 +938,21 @@ static void placerHeros(Combat *cb, int i, Personnage *p, int copie)
     } else {
         c->p = p;
     }
-    c->energieMax = ENERGIE_ULTIME[c->p->classe];
+    /* Classe hors limites (fichier modifié à la main) : on ne lit pas en
+     * dehors du tableau. */
+    c->energieMax = ((unsigned)c->p->classe < NB_CLASSES) ? ENERGIE_ULTIME[c->p->classe] : ENERGIE_ULTIME[GUERRIER];
     c->energie = c->energieMax / 2; /* on commence à moitié chargé */
     c->av = avDeBase(c);
 }
 
 int combatInit(Combat *cb, Personnage *equipe[], int n, int etage)
 {
+    if (cb == NULL) {
+        return 0;
+    }
+    if (equipe == NULL) {
+        n = 0; /* pas d'équipe : le combat est refusé plus bas */
+    }
     memset(cb, 0, sizeof *cb);
     cb->mode = MODE_BOTS;
     combatGraine(cb, (unsigned)rand());
@@ -941,6 +980,11 @@ int combatInit(Combat *cb, Personnage *equipe[], int n, int etage)
 
 int combatInitDuel(Combat *cb, Personnage *equipe1[], int n1, Personnage *equipe2[], int n2)
 {
+    if (cb == NULL) {
+        return 0;
+    }
+    if (equipe1 == NULL) n1 = 0;
+    if (equipe2 == NULL) n2 = 0;
     memset(cb, 0, sizeof *cb);
     cb->mode = MODE_DUEL;
     combatGraine(cb, (unsigned)rand());
@@ -970,7 +1014,7 @@ int combatInitDuel(Combat *cb, Personnage *equipe1[], int n1, Personnage *equipe
 
 int combatPeutAgir(const Combat *cb, int lanceur, enum TypeAction action)
 {
-    if (cb->etat != COMBAT_TOUR_JOUEUR || lanceur < 0 || lanceur >= COMBAT_MAX
+    if (cb == NULL || cb->etat != COMBAT_TOUR_JOUEUR || lanceur < 0 || lanceur >= COMBAT_MAX
         || !cb->c[lanceur].heros || !combatVivant(cb, lanceur)
         || combatCamp(lanceur) != combatCamp(cb->actif)) {
         return 0;
@@ -991,7 +1035,8 @@ int combatPeutAgir(const Combat *cb, int lanceur, enum TypeAction action)
 
 int combatCibleValide(const Combat *cb, int lanceur, enum TypeAction action, int cible)
 {
-    if (cible < 0 || cible >= COMBAT_MAX || lanceur < 0 || lanceur >= COMBAT_MAX) {
+    if (cb == NULL || cible < 0 || cible >= COMBAT_MAX || lanceur < 0 || lanceur >= COMBAT_MAX
+        || !cb->c[lanceur].present || cb->c[lanceur].p == NULL) {
         return 0;
     }
     int memeCamp = combatCamp(cible) == combatCamp(lanceur);
@@ -1009,16 +1054,25 @@ int combatCibleValide(const Combat *cb, int lanceur, enum TypeAction action, int
     return 0;
 }
 
+/** PV en pourcentage du maximum (0 si pvMax vaut 0, pas de division par zéro). */
+static int pourcentPv(const Personnage *p)
+{
+    return p->pvMax > 0 ? p->pv * 100 / p->pvMax : 0;
+}
+
 int combatCibleParDefaut(const Combat *cb, int lanceur, enum TypeAction action)
 {
+    if (cb == NULL || lanceur < 0 || lanceur >= COMBAT_MAX || !cb->c[lanceur].present
+        || cb->c[lanceur].p == NULL) {
+        return -1;
+    }
     /* Pour un soin, on vise l'allié le plus blessé. */
     if (cb->c[lanceur].p->classe == PRETRE
         && capaciteClasse(PRETRE, action)->ciblage == CIBLE_ALLIE) {
         int meilleur = -1;
         for (int i = debutCamp(combatCamp(lanceur)); i < finCamp(combatCamp(lanceur)); i++) {
             if (combatVivant(cb, i)
-                && (meilleur < 0 || cb->c[i].p->pv * 100 / cb->c[i].p->pvMax
-                                    < cb->c[meilleur].p->pv * 100 / cb->c[meilleur].p->pvMax)) {
+                && (meilleur < 0 || pourcentPv(cb->c[i].p) < pourcentPv(cb->c[meilleur].p))) {
                 meilleur = i;
             }
         }
@@ -1032,8 +1086,13 @@ int combatCibleParDefaut(const Combat *cb, int lanceur, enum TypeAction action)
     return -1;
 }
 
+/* [DUCKGEON - SDL] */
 int combatEstTouche(const Combat *cb, int lanceur, enum TypeAction action, int cible, int i)
 {
+    if (cb == NULL || lanceur < 0 || lanceur >= COMBAT_MAX || i < 0 || i >= COMBAT_MAX
+        || cb->c[lanceur].p == NULL) {
+        return 0;
+    }
     const Capacite *cap = capaciteClasse(cb->c[lanceur].p->classe, action);
     int memeCamp = combatCamp(i) == combatCamp(lanceur);
     switch (cap->ciblage) {
@@ -1331,6 +1390,9 @@ static int choisirCibleMonstre(Combat *cb)
 
 void combatTourEnnemi(Combat *cb)
 {
+    if (cb == NULL) {
+        return;
+    }
     int a = cb->actif;
     if (cb->etat != COMBAT_TOUR_ENNEMI || !combatVivant(cb, a) || cb->c[a].heros) {
         return;
@@ -1452,7 +1514,7 @@ void combatTourEnnemi(Combat *cb)
 
 void combatAvancer(Combat *cb)
 {
-    if (cb->etat == COMBAT_VICTOIRE || cb->etat == COMBAT_DEFAITE
+    if (cb == NULL || cb->etat == COMBAT_VICTOIRE || cb->etat == COMBAT_DEFAITE
         || cb->etat == COMBAT_FIN_VAGUE || !cb->tourFini) {
         return;
     }
@@ -1517,7 +1579,7 @@ void combatAvancer(Combat *cb)
 
 void combatVagueSuivante(Combat *cb)
 {
-    if (cb->etat != COMBAT_FIN_VAGUE) {
+    if (cb == NULL || cb->etat != COMBAT_FIN_VAGUE) {
         return;
     }
     cb->vague++;
@@ -1535,6 +1597,9 @@ void combatVagueSuivante(Combat *cb)
 
 int combatOrdre(const Combat *cb, int ordre[], double avs[], int max)
 {
+    if (cb == NULL || ordre == NULL || avs == NULL || max <= 0) {
+        return 0;
+    }
     double temps[COMBAT_MAX];
     for (int i = 0; i < COMBAT_MAX; i++) {
         temps[i] = combatVivant(cb, i) ? cb->c[i].av : -1;

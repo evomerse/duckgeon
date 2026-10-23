@@ -3,6 +3,8 @@
  * @brief Éditeur de héros : identité (nom, classe, élément), apparence
  *        (13 options) et répartition des points de statistiques.
  */
+
+/* [DUCKGEON - SDL] Fichier de la version graphique (./duckgeon) uniquement. */
 #include <math.h>
 #include <stdio.h>
 #include <string.h>

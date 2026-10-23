@@ -3,6 +3,8 @@
  * @brief Déclarations du programme principal : fonctions du menu
  *        interactif (le tableau dynamique est dans donjon.h).
  */
+
+/* [DONJON - terminal] Fichier de la version terminal (./donjon) uniquement. */
 #ifndef MAIN_H
 #define MAIN_H
 

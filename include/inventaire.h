@@ -2,6 +2,10 @@
  * @file inventaire.h
  * @brief Gestion de l'inventaire d'un personnage.
  */
+
+/* [COMMUN] Logique partagée par Donjon (terminal) et Duckgeon (SDL).
+ * Les blocs qui ne servent qu'à une des deux versions sont marqués
+ * [DONJON - terminal] ou [DUCKGEON - SDL]. */
 #ifndef INVENTAIRE_H
 #define INVENTAIRE_H
 
@@ -27,6 +31,7 @@ int retirerObjet(Personnage *p, int index, Objet *retire);
  */
 int utiliserObjet(Personnage *p, int index);
 
+/* [DONJON - terminal] */
 /** Affiche l'arme équipée et le contenu de l'inventaire. */
 void afficherInventaire(const Personnage *p);
 

@@ -2,13 +2,17 @@
  * @file inventaire.c
  * @brief Implémentation de la gestion de l'inventaire.
  */
+
+/* [COMMUN] Logique partagée par Donjon (terminal) et Duckgeon (SDL).
+ * Les blocs qui ne servent qu'à une des deux versions sont marqués
+ * [DONJON - terminal] ou [DUCKGEON - SDL]. */
 #include <stdio.h>
 
 #include "inventaire.h"
 
 int ajouterObjet(Personnage *p, Objet objet)
 {
-    if (p == NULL || p->nbObjets >= INVENTAIRE_MAX) {
+    if (p == NULL || p->nbObjets < 0 || p->nbObjets >= INVENTAIRE_MAX) {
         return 0;
     }
     p->inventaire[p->nbObjets++] = objet;
@@ -17,7 +21,7 @@ int ajouterObjet(Personnage *p, Objet objet)
 
 int retirerObjet(Personnage *p, int index, Objet *retire)
 {
-    if (p == NULL || index < 0 || index >= p->nbObjets) {
+    if (p == NULL || index < 0 || index >= p->nbObjets || p->nbObjets > INVENTAIRE_MAX) {
         return 0;
     }
     if (retire != NULL) {
@@ -60,6 +64,7 @@ int utiliserObjet(Personnage *p, int index)
     return 1;
 }
 
+/* [DONJON - terminal] */
 void afficherInventaire(const Personnage *p)
 {
     if (p == NULL) {
@@ -77,7 +82,7 @@ void afficherInventaire(const Personnage *p)
     if (p->nbObjets == 0) {
         printf("  (vide)\n");
     }
-    for (int i = 0; i < p->nbObjets; i++) {
+    for (int i = 0; i < p->nbObjets && i < INVENTAIRE_MAX; i++) {
         printf("  %d. ", i + 1);
         afficherObjet(&p->inventaire[i]);
         printf("\n");

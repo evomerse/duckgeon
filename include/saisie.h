@@ -2,6 +2,10 @@
  * @file saisie.h
  * @brief Fonctions de saisie clavier sécurisées (pas de scanf brut).
  */
+
+/* [DONJON - terminal] Saisies au clavier dans le terminal. Le fichier est
+ * compilé dans les deux versions (creerPersonnage s'en sert) mais seul
+ * Donjon l'utilise vraiment : Duckgeon passe par la souris et SDL. */
 #ifndef SAISIE_H
 #define SAISIE_H
 

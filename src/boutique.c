@@ -2,6 +2,10 @@
  * @file boutique.c
  * @brief Catalogue des cosmétiques, achats et récompenses en foie gras.
  */
+
+/* [COMMUN] Logique partagée par Donjon (terminal) et Duckgeon (SDL).
+ * Les blocs qui ne servent qu'à une des deux versions sont marqués
+ * [DONJON - terminal] ou [DUCKGEON - SDL]. */
 #include <stddef.h>
 
 #include "boutique.h"
@@ -19,6 +23,8 @@ static const Cosmetique CATALOGUE[NB_COSMETIQUES] = {
     { "Plumage du Néant", "Noir violacé, plein d'étoiles.", COSMETIQUE_PLUMAGE, NB_PLUMAGES_BASE + 2, 150 },
 };
 
+/* [DUCKGEON - SDL] Boutique de cosmétiques : uniquement dans Duckgeon
+ * (dans le terminal on gagne le foie gras mais on le dépense ici). */
 const Cosmetique *cosmetique(int i)
 {
     return (i >= 0 && i < NB_COSMETIQUES) ? &CATALOGUE[i] : NULL;
@@ -26,7 +32,7 @@ const Cosmetique *cosmetique(int i)
 
 int cosmetiqueAchete(const Progression *prog, int i)
 {
-    return i >= 0 && i < NB_COSMETIQUES && (prog->cosmetiques & (1u << i)) != 0;
+    return prog != NULL && i >= 0 && i < NB_COSMETIQUES && (prog->cosmetiques & (1u << i)) != 0;
 }
 
 int optionDebloquee(const Progression *prog, enum TypeCosmetique type, int valeur)
@@ -54,8 +60,15 @@ int acheterCosmetique(Progression *prog, int i)
     return 1;
 }
 
+/* [COMMUN] Les deux versions donnent du foie gras après un étage. */
 int recompenseFoieGras(Progression *prog, int etage, int avecBoss)
 {
+    /* Étage 0 : 1u << -1, décalage interdit en C. On borne comme le moteur. */
+    if (prog == NULL) {
+        return 0;
+    }
+    if (etage < 1) etage = 1;
+    if (etage > 32) etage = 32;
     int gain = 4 + 3 * etage;
     if (avecBoss) {
         gain *= 2;

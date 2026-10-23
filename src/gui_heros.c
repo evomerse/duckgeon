@@ -3,6 +3,8 @@
  * @brief Écrans « Mes héros » (liste, fiche, inventaire) et « Préparer
  *        l'expédition » (choix de l'équipe et de l'étage).
  */
+
+/* [DUCKGEON - SDL] Fichier de la version graphique (./duckgeon) uniquement. */
 #include <math.h>
 #include <stdio.h>
 #include <string.h>

@@ -2,6 +2,10 @@
  * @file objet.c
  * @brief Table de butin et affichage des objets.
  */
+
+/* [COMMUN] Logique partagée par Donjon (terminal) et Duckgeon (SDL).
+ * Les blocs qui ne servent qu'à une des deux versions sont marqués
+ * [DONJON - terminal] ou [DUCKGEON - SDL]. */
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -28,6 +32,7 @@ Objet objetDepart(void)
     return TABLE_BUTIN[0]; /* une potion mineure */
 }
 
+/* [DONJON - terminal] */
 void afficherObjet(const Objet *o)
 {
     if (o == NULL) {

@@ -3,6 +3,10 @@
  * @brief Tableau dynamique de personnages (Donjon), partagé par la version
  *        console et la version graphique.
  */
+
+/* [COMMUN] Logique partagée par Donjon (terminal) et Duckgeon (SDL).
+ * Les blocs qui ne servent qu'à une des deux versions sont marqués
+ * [DONJON - terminal] ou [DUCKGEON - SDL]. */
 #ifndef DONJON_H
 #define DONJON_H
 
@@ -31,6 +35,7 @@ void donjonLiberer(Donjon *d);
  */
 Personnage *donjonNouvelleCase(Donjon *d);
 
+/* [DUCKGEON - SDL] */
 /**
  * Supprime le personnage d'indice index en décalant les suivants.
  * @return 1 si le personnage a été supprimé, 0 si l'indice est invalide.

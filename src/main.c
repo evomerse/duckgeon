@@ -10,6 +10,8 @@
  * (module donjon.c, partagé avec la version graphique).
  * Toute la mémoire est libérée (free) avant de quitter.
  */
+
+/* [DONJON - terminal] Fichier de la version terminal (./donjon) uniquement. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -28,6 +30,9 @@
 
 void afficherTous(const Donjon *d)
 {
+    if (d == NULL) {
+        return;
+    }
     if (d->taille == 0) {
         printf("Le donjon est vide.\n");
         return;
@@ -41,6 +46,9 @@ void afficherTous(const Donjon *d)
 
 void menuCreer(Donjon *d)
 {
+    if (d == NULL) {
+        return;
+    }
     Personnage *p = donjonNouvelleCase(d);
     if (p == NULL) {
         printf("Memoire insuffisante, personnage non cree.\n");
@@ -59,6 +67,9 @@ void menuCreer(Donjon *d)
  */
 int choisirCombattant(const Donjon *d, const char *invite, int exclu)
 {
+    if (d == NULL) {
+        return -1;
+    }
     for (;;) {
         int choix = lireEntier(invite, 1, d->taille);
         if (choix == -1) {
@@ -77,6 +88,9 @@ int choisirCombattant(const Donjon *d, const char *invite, int exclu)
 
 void menuCombat(Donjon *d, Progression *prog)
 {
+    if (d == NULL || prog == NULL) {
+        return;
+    }
     printf("\n--- Lancer un combat ---\n");
     printf("1. Explorer le donjon (equipe contre monstres, etage %d debloque)\n", prog->etageMax);
     printf("2. Duel en equipe (2 joueurs sur le meme clavier)\n");
@@ -139,6 +153,9 @@ static int tourBot(Personnage *bot, Personnage *joueur)
 
 void menuDuelSimple(Donjon *d)
 {
+    if (d == NULL) {
+        return;
+    }
     int vivants = 0;
     for (int i = 0; i < d->taille; i++) {
         vivants += estVivant(&d->elements[i]);
@@ -215,6 +232,9 @@ void menuDuelSimple(Donjon *d)
  *  permet de le ranimer). */
 void menuInventaire(Donjon *d)
 {
+    if (d == NULL) {
+        return;
+    }
     if (d->taille == 0) {
         printf("Le donjon est vide.\n");
         return;
@@ -252,6 +272,9 @@ void menuInventaire(Donjon *d)
 
 void menuSauvegarder(const Donjon *d)
 {
+    if (d == NULL) {
+        return;
+    }
     if (donjonSauvegarder(d, FICHIER_SAUVEGARDE)) {
         printf("%d personnage(s) sauvegarde(s) dans %s.\n", d->taille, FICHIER_SAUVEGARDE);
     } else {
@@ -261,6 +284,9 @@ void menuSauvegarder(const Donjon *d)
 
 void menuCharger(Donjon *d)
 {
+    if (d == NULL) {
+        return;
+    }
     if (!sauvegardeExiste(FICHIER_SAUVEGARDE)) {
         printf("Aucune sauvegarde trouvee (%s).\n", FICHIER_SAUVEGARDE);
         return;
@@ -280,6 +306,9 @@ void menuCharger(Donjon *d)
 
 void menuAmeliorer(Donjon *d)
 {
+    if (d == NULL) {
+        return;
+    }
     if (d->taille == 0) {
         printf("Le donjon est vide.\n");
         return;
@@ -315,8 +344,9 @@ int main(void)
         return EXIT_FAILURE;
     }
 
-    /* Progression du joueur (étages débloqués, foie gras, cosmétiques) :
-     * le même fichier que Duckgeon, enregistré à chaque changement. */
+    /* Progression du joueur (étages débloqués, foie gras) : le même
+     * fichier que Duckgeon, enregistré à chaque changement. Pas de boutique
+     * dans le terminal : le foie gras gagné ici se dépense dans Duckgeon. */
     Progression prog = { 1, 0, 0, 0 };
     chargerProgression(FICHIER_PROGRESSION, &prog);
     if (prog.etageMax < 1) prog.etageMax = 1;
@@ -335,10 +365,9 @@ int main(void)
         printf("8. Changer l'element d'un personnage\n");
         printf("9. Bestiaire\n");
         printf("10. Table des elements\n");
-        printf("11. Boutique de cosmetiques (%d foie gras)\n", prog.foieGras);
-        printf("12. Se reposer au camp (soigne tout le monde)\n");
+        printf("11. Se reposer au camp (soigne tout le monde)\n");
         printf("0. Quitter\n");
-        choix = lireEntier("Votre choix : ", 0, 12);
+        choix = lireEntier("Votre choix : ", 0, 11);
 
         switch (choix) {
         case 1: menuCreer(&donjon); break;
@@ -351,8 +380,7 @@ int main(void)
         case 8: menuElement(&donjon); break;
         case 9: menuBestiaire(); break;
         case 10: afficherTableElements(); break;
-        case 11: menuBoutique(&donjon, &prog); break;
-        case 12: menuRepos(&donjon); break;
+        case 11: menuRepos(&donjon); break;
         case 0: printf("A bientot dans le donjon !\n"); break;
         default: choix = 0; break; /* EOF : on quitte proprement */
         }

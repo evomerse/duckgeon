@@ -2,6 +2,8 @@
  * @file gui.c
  * @brief Initialisation SDL, boucle d'événements, texte et widgets.
  */
+
+/* [DUCKGEON - SDL] Fichier de la version graphique (./duckgeon) uniquement. */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

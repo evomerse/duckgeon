@@ -7,6 +7,8 @@
  * de formes simples, ce qui permet de changer chaque détail (coupe, couleur,
  * coiffe, arme de classe...) instantanément dans l'éditeur.
  */
+
+/* [DUCKGEON - SDL] Fichier de la version graphique (./duckgeon) uniquement. */
 #ifndef GUI_SPRITE_H
 #define GUI_SPRITE_H
 

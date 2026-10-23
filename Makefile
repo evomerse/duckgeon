@@ -12,11 +12,11 @@ ifeq ($(OS),Windows_NT)
 SDL_LIBS  += -lws2_32 -liphlpapi
 endif
 
-# Logique métier, partagée par les deux versions
+# [COMMUN] Logique métier, partagée par les deux versions
 LOGIQUE = personnage objet inventaire saisie donjon sauvegarde boutique combat
-# Version console
+# [DONJON - terminal] Version console
 CONSOLE = main console_jeu
-# Version graphique (+ moteur de combat en équipe, duel en ligne)
+# [DUCKGEON - SDL] Version graphique (+ moteur de combat en équipe, duel en ligne)
 GUI     = gui gui_formes gui_sprite gui_main gui_heros gui_editeur gui_combat gui_boutique gui_bestiaire \
           gui_en_ligne reseau
 

@@ -7,6 +7,8 @@
  * ils se dessinent et retournent s'ils ont été cliqués. Il n'y a donc
  * aucun objet d'interface à créer ni à libérer.
  */
+
+/* [DUCKGEON - SDL] Fichier de la version graphique (./duckgeon) uniquement. */
 #ifndef GUI_H
 #define GUI_H
 

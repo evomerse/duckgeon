@@ -8,6 +8,8 @@
  * son équipe ; l'invité répond avec la sienne, construite selon ce format.
  * Le duel commence alors sur les deux machines.
  */
+
+/* [DUCKGEON - SDL] Fichier de la version graphique (./duckgeon) uniquement. */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>

@@ -3,6 +3,10 @@
  * @brief Déclarations du module Personnage : structure, classes et fonctions
  *        de création, d'affichage, de combat et de progression (XP).
  */
+
+/* [COMMUN] Logique partagée par Donjon (terminal) et Duckgeon (SDL).
+ * Les blocs qui ne servent qu'à une des deux versions sont marqués
+ * [DONJON - terminal] ou [DUCKGEON - SDL]. */
 #ifndef PERSONNAGE_H
 #define PERSONNAGE_H
 
@@ -30,6 +34,8 @@ enum Element {
 #define ELEMENT_FORT_POURCENT   125
 #define ELEMENT_FAIBLE_POURCENT  80
 
+/* [DUCKGEON - SDL] Apparence des canards : seule la version graphique la
+ * dessine. Le terminal la garde juste dans la sauvegarde. */
 /* Nombre de variantes pour chaque option de l'apparence. */
 /* Les options au-delà de *_BASE sont des cosmétiques à débloquer avec du
  * foie gras (boutique de l'interface graphique, voir boutique.h). */
@@ -114,18 +120,22 @@ typedef struct Personnage Personnage;
 /** Statistiques améliorables avec un point. */
 enum Stat { STAT_PV, STAT_ATK, STAT_DEF, STAT_VIT, NB_STATS };
 
+/* [DONJON - terminal] */
 /**
  * Remplit le personnage pointé par p en demandant nom et classe à
  * l'utilisateur. Les statistiques sont initialisées selon la classe.
  */
 void creerPersonnage(Personnage *p);
 
+/* [DONJON - terminal] */
 /** Demande l'élément des attaques (Entrée/0 garde l'élément actuel). */
 void choisirElement(Personnage *p);
 
+/* [DONJON - terminal] */
 /** Affiche une ligne décrivant le personnage (lecture seule : const). */
 void afficherPersonnage(const Personnage *p);
 
+/* [DONJON - terminal] */
 /**
  * L'attaquant frappe la cible : les PV de la cible sont modifiés
  * directement grâce au pointeur. Les PV ne descendent jamais sous 0.
@@ -144,6 +154,7 @@ void initialiserStats(Personnage *p, enum Classe classe);
 /** Retourne le libellé texte d'une classe ("Guerrier", "Mage", ...). */
 const char *nomClasse(enum Classe classe);
 
+/* [DUCKGEON - SDL] */
 /** Retourne une phrase décrivant le rôle et la particularité de la classe. */
 const char *descriptionClasse(enum Classe classe);
 
@@ -175,6 +186,7 @@ void ecrireElements(unsigned masque, char *buf, int taille);
 /** Chance de coup critique de la classe, en pourcentage. */
 int chanceCritique(const Personnage *p);
 
+/* [DUCKGEON - SDL] */
 /** Tire une apparence au hasard (toutes les options sont valides). */
 void apparenceAleatoire(Apparence *a);
 
@@ -196,6 +208,7 @@ void gagnerXp(Personnage *p, int xp);
 /** Niveau maximum proposé pour les duels à niveau imposé. */
 #define NIVEAU_DUEL_MAX 30
 
+/* [DUCKGEON - SDL] */
 /**
  * Duel à niveau imposé : remplace les statistiques du héros par celles de
  * sa classe au niveau donné (mêmes gains qu'en montant de niveau). Le nom,
