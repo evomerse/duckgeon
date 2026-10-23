@@ -1,0 +1,13 @@
+# Compilation
+build/
+donjon
+duckgeon
+*.o
+
+# Sauvegardes et captures locales
+*.sav
+*.sav.tmp
+capture-*.bmp
+
+# Sujet du projet (document de l'école)
+Descriptif du Mini Projet .pdf
