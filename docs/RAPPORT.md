@@ -1,4 +1,4 @@
-# Rapport technique — Le Donjon / Duckgeon (Parties 1 et 2 + bonus graphique)
+# Rapport technique - Le Donjon / Duckgeon (Parties 1 et 2 + bonus graphique)
 
 > Document de rendu (choix réalisés, questions de réflexion, tests). Pour
 > installer et jouer, voir le [README](../README.md).

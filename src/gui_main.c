@@ -1,6 +1,6 @@
 /**
  * @file gui_main.c
- * @brief Duckgeon — version graphique (SDL2) du Donjon : programme principal,
+ * @brief Duckgeon - version graphique (SDL2) du Donjon : programme principal,
  *        boucle d'événements et écran titre.
  *
  * La logique métier (personnage.c, inventaire.c, donjon.c...) est la même
@@ -102,24 +102,28 @@ void ecranMenu(App *app)
     ligne(g, 86, 238, 460, 238, 2, avecAlpha(COUL_OR, 140));
     losange(g, 470, 238, 6, 6, COUL_OR);
 
-    float bx = 86, by = 290;
-    if (bouton(g, bx, by, 320, 54, "Combattre (bots ou duel)", BOUTON_PRINCIPAL, app->donjon.taille > 0)
+    float bx = 86, by = 268;
+    const float pas = 58, h = 46;
+    if (bouton(g, bx, by, 320, 50, "Combattre (bots ou duel)", BOUTON_PRINCIPAL, app->donjon.taille > 0)
         || (guiTouche(g, SDLK_RETURN) && app->donjon.taille > 0)) {
         changerEcran(app, ECRAN_EQUIPE);
     }
-    if (bouton(g, bx, by + 70, 320, 50, "Mes héros", BOUTON_NORMAL, 1)) {
+    if (bouton(g, bx, by + pas, 320, h, "Duel 1 contre 1 (local)", BOUTON_NORMAL, app->donjon.taille > 0)) {
+        ouvrirDuel1v1(app);
+    }
+    if (bouton(g, bx, by + 2 * pas, 320, h, "Mes héros", BOUTON_NORMAL, 1)) {
         changerEcran(app, ECRAN_HEROS);
     }
-    if (bouton(g, bx, by + 134, 320, 50, "Créer un héros", BOUTON_NORMAL, 1)) {
+    if (bouton(g, bx, by + 3 * pas, 320, h, "Créer un héros", BOUTON_NORMAL, 1)) {
         ouvrirEditeur(app, -1);
     }
-    if (bouton(g, bx, by + 198, 320, 50, "Boutique de cosmétiques", BOUTON_NORMAL, 1)) {
+    if (bouton(g, bx, by + 4 * pas, 320, h, "Boutique de cosmétiques", BOUTON_NORMAL, 1)) {
         changerEcran(app, ECRAN_BOUTIQUE);
     }
-    if (bouton(g, bx, by + 262, 320, 50, "Bestiaire et éléments", BOUTON_NORMAL, 1)) {
+    if (bouton(g, bx, by + 5 * pas, 320, h, "Bestiaire et éléments", BOUTON_NORMAL, 1)) {
         changerEcran(app, ECRAN_BESTIAIRE);
     }
-    if (bouton(g, bx, by + 326, 320, 50, "Quitter", BOUTON_DISCRET, 1)
+    if (bouton(g, bx, by + 6 * pas, 320, h, "Quitter", BOUTON_DISCRET, 1)
         || guiTouche(g, SDLK_ESCAPE)) {
         g->quitter = 1;
     }

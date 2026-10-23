@@ -347,6 +347,18 @@ static void completerEquipe(App *app, int equipe)
     }
 }
 
+void ouvrirDuel1v1(App *app)
+{
+    Preparation *prep = &app->prep;
+    prep->mode = MODE_DUEL;
+    prep->taille = 1;
+    prep->nb[0] = prep->nb[1] = 0;
+    prep->equipeEditee = 0;
+    completerEquipe(app, 0);
+    completerEquipe(app, 1); /* un autre héros si possible */
+    changerEcran(app, ECRAN_EQUIPE);
+}
+
 /** Un emplacement d'équipe (héros choisi ou case vide). Retourne 1 si cliqué. */
 static int emplacement(App *app, int equipe, int k, float x, float y, float w, float h, SDL_Color c)
 {

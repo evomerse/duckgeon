@@ -1,4 +1,4 @@
-# 🦆 Duckgeon — Chroniques des Canards
+# 🦆 Duckgeon - Chroniques des Canards
 
 **Duckgeon** est un RPG tour par tour écrit en **C** avec **SDL2**. Une équipe de
 héros canards descend les 10 étages d'un donjon jusqu'au Canard Noir. Le projet
@@ -135,8 +135,11 @@ Le combat s'inspire de *Honkai: Star Rail* :
 | `Échap`             | Retour / annuler                    |
 | `F12`               | Capture d'écran (`capture-*.bmp`)   |
 
-**Duel local** : deux joueurs sur le même PC, chacun son tour. Les héros sont
-copiés à PV pleins : aucune conséquence sur le donjon.
+**Duel local** : deux joueurs sur le même PC, chacun son tour, de 1 contre 1
+à 4 contre 4. Le bouton **Duel 1 contre 1 (local)** de l'écran titre prépare
+directement un 1v1 (un héros différent pour chaque joueur, modifiable avant
+de lancer). Les héros sont copiés à PV pleins : aucune conséquence sur le
+donjon.
 
 ![Panneau d'action : nom et effet selon l'élément, efficacité contre la cible](docs/captures/combat_elements.png)
 
@@ -369,7 +372,7 @@ du modèle logique au code est détaillé dans le [modèle physique](#modèle-ph
 | `foieGras`        | Monnaie du joueur                               | Entier      | ≥ 0                                       |
 | `nomCosmetique`, `prix` | Article de la boutique                    | Texte, entier | prix > 0                                |
 
-### MCD — Modèle conceptuel des données
+### MCD - Modèle conceptuel des données
 
 ```mermaid
 erDiagram
@@ -473,19 +476,19 @@ Cardinalités en notation Merise :
 
 **Règles de gestion** :
 
-- RG1 — Un héros a une classe et un élément ; il commence niveau 1 avec une potion.
-- RG2 — Le sac d'un héros contient au plus 5 objets ; il équipe au plus une arme.
-- RG3 — À chaque niveau, un héros gagne 2 points de stats ; à chaque étage nettoyé, 1 point (+2 avec un boss).
-- RG4 — Un point de stats se dépense une seule fois, sur une statistique au choix.
-- RG5 — Le foie gras gagné vaut `4 + 3 × étage`, doublé si l'étage a un boss, +25 au premier passage.
-- RG6 — Un cosmétique ne s'achète qu'une fois, si le joueur a assez de foie gras ; il sert alors à tous ses héros.
-- RG7 — Un héros ne porte un cosmétique payant que si le joueur l'a acheté.
-- RG8 — Un étage n'est accessible que si l'étage précédent a été nettoyé.
-- RG9 — Chaque élément en bat exactement deux autres et est battu par deux autres. Un coup fort fait +25 % de dégâts et entame la garde, un coup faible −20 %.
-- RG10 — Les faiblesses d'un monstre sont les éléments qui battent le sien, plus ses faiblesses bonus.
-- RG11 — Après sa compétence, le paladin attend 5 de ses tours avant de la relancer.
+- RG1 - Un héros a une classe et un élément ; il commence niveau 1 avec une potion.
+- RG2 - Le sac d'un héros contient au plus 5 objets ; il équipe au plus une arme.
+- RG3 - À chaque niveau, un héros gagne 2 points de stats ; à chaque étage nettoyé, 1 point (+2 avec un boss).
+- RG4 - Un point de stats se dépense une seule fois, sur une statistique au choix.
+- RG5 - Le foie gras gagné vaut `4 + 3 × étage`, doublé si l'étage a un boss, +25 au premier passage.
+- RG6 - Un cosmétique ne s'achète qu'une fois, si le joueur a assez de foie gras ; il sert alors à tous ses héros.
+- RG7 - Un héros ne porte un cosmétique payant que si le joueur l'a acheté.
+- RG8 - Un étage n'est accessible que si l'étage précédent a été nettoyé.
+- RG9 - Chaque élément en bat exactement deux autres et est battu par deux autres. Un coup fort fait +25 % de dégâts et entame la garde, un coup faible −20 %.
+- RG10 - Les faiblesses d'un monstre sont les éléments qui battent le sien, plus ses faiblesses bonus.
+- RG11 - Après sa compétence, le paladin attend 5 de ses tours avant de la relancer.
 
-### MLD — Modèle logique des données
+### MLD - Modèle logique des données
 
 Chaque relation est donnée avec sa clé primaire et ses clés étrangères (`#`).
 
@@ -564,7 +567,7 @@ Choix de conception :
 - Les **données de référence** (classes, monstres, étages, catalogue) sont des
   tables constantes. On les modifie dans le code, pas pendant la partie.
 
-### MCT — Modèle conceptuel des traitements
+### MCT - Modèle conceptuel des traitements
 
 **Opération « Combattre un étage »**
 

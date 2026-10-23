@@ -85,6 +85,9 @@ void ecranBestiaire(App *app);
 /** Ouvre l'éditeur sur l'onglet Statistiques pour répartir les points. */
 void ouvrirAmelioration(App *app, int index);
 
+/** Prépare un duel local 1 contre 1 (un héros par joueur) et l'affiche. */
+void ouvrirDuel1v1(App *app);
+
 /** Ouvre l'éditeur sur un nouveau héros (index -1) ou un héros existant. */
 void ouvrirEditeur(App *app, int index);
 

@@ -472,10 +472,10 @@ CombatGui *combatGuiCreer(App *app)
     cg->cible = -1;
     char titre[48];
     if (cg->cb.mode == MODE_DUEL) {
-        snprintf(titre, sizeof titre, "Duel — %d contre %d", n, n2);
+        snprintf(titre, sizeof titre, "Duel - %d contre %d", n, n2);
         cg->dernierCamp = combatCamp(cg->cb.actif); /* pas de 2e bannière */
     } else {
-        snprintf(titre, sizeof titre, "Étage %d — Vague 1/%d", cg->etage, cg->cb.nbVagues);
+        snprintf(titre, sizeof titre, "Étage %d - Vague 1/%d", cg->etage, cg->cb.nbVagues);
     }
     banniere(cg, titre);
     if (cg->cb.etat == COMBAT_TOUR_JOUEUR) {
@@ -938,7 +938,7 @@ static void dessinerActions(Gui *g, CombatGui *cg)
     int camp = combatCamp(l);
     int sp = cb->sp[camp];
     if (cb->mode == MODE_DUEL) {
-        texte(g, POLICE_PETITE, camp == 0 ? "Points de compétence — Joueur 1" : "Points de compétence — Joueur 2",
+        texte(g, POLICE_PETITE, camp == 0 ? "Points de compétence - Joueur 1" : "Points de compétence - Joueur 2",
               1240, 520, camp == 0 ? COUL_J1 : COUL_J2, ALIGN_DROITE);
     } else {
         texte(g, POLICE_PETITE, "Points de compétence", 1240, 520, COUL_TEXTE_DOUX, ALIGN_DROITE);
@@ -984,7 +984,7 @@ static void dessinerActions(Gui *g, CombatGui *cg)
     rectArrondi(g, px, py, pw, ph, 12, rgba(14, 12, 30, 220));
     contourArrondi(g, px, py, pw, ph, 12, 1.2f, ult ? COUL_OR_CLAIR : COUL_BORDURE);
     char titre[96];
-    snprintf(titre, sizeof titre, "%s — %s", pl->nom, TYPES[cg->choix]);
+    snprintf(titre, sizeof titre, "%s - %s", pl->nom, TYPES[cg->choix]);
     texte(g, POLICE_PETITE, titre, px + 14, py + 8, cc, ALIGN_GAUCHE);
     iconeElement(g, pl->element, px + pw - 20, py + 16, 8);
     texte(g, POLICE_MOYENNE, nomCap, px + 14, py + 24, COUL_TEXTE, ALIGN_GAUCHE);

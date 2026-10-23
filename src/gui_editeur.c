@@ -212,7 +212,7 @@ static void ongletIdentite(App *app, float x, float y)
 
     /* effet de l'élément sur les attaques */
     char effet[160];
-    snprintf(effet, sizeof effet, "Effet sur les attaques — %s : %s", nomEffetElement(b->element),
+    snprintf(effet, sizeof effet, "Effet sur les attaques - %s : %s", nomEffetElement(b->element),
              effetElement(b->element));
     texte(g, POLICE_PETITE, effet, x, ey + 62, couleurElement(b->element), ALIGN_GAUCHE);
 

@@ -908,7 +908,7 @@ int combatInit(Combat *cb, Personnage *equipe[], int n, int etage)
     }
 
     genererVague(cb);
-    journaliser(cb, "Étage %d : %s — vague 1/%d", cb->etage, combatEtage(cb->etage)->nom, cb->nbVagues);
+    journaliser(cb, "Étage %d : %s - vague 1/%d", cb->etage, combatEtage(cb->etage)->nom, cb->nbVagues);
     cb->tourFini = 1;
     combatAvancer(cb);
     return 1;
