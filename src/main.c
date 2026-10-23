@@ -90,6 +90,53 @@ void menuCombat(Donjon *d, Progression *prog)
     }
 }
 
+/** Indice du premier objet de soin du sac, ou -1 s'il n'y en a pas. */
+static int premierSoin(const Personnage *p)
+{
+    for (int i = 0; i < p->nbObjets; i++) {
+        if (p->inventaire[i].type == SOIN) {
+            return i;
+        }
+    }
+    return -1;
+}
+
+/** Se mettre en garde : la défense augmente jusqu'au prochain tour du
+ *  personnage. Retourne le bonus ajouté (à retirer ensuite). */
+static int seDefendre(Personnage *p)
+{
+    int bonus = p->def > 2 ? p->def : 2; /* défense doublée, au moins +2 */
+    p->def += bonus;
+    printf("%s se met en garde (DEF %d jusqu'a son prochain tour).\n", p->nom, p->def);
+    return bonus;
+}
+
+/** Affiche les PV des deux duellistes en début de tour. */
+static void etatDuel(const Personnage *joueur, const Personnage *bot)
+{
+    printf("  Vous : %-20s %4d / %-4d PV\n", joueur->nom, joueur->pv, joueur->pvMax);
+    printf("  Bot  : %-20s %4d / %-4d PV\n", bot->nom, bot->pv, bot->pvMax);
+}
+
+/**
+ * Tour du bot : il boit une potion quand il est presque K.O., se met
+ * parfois en garde quand il est blessé, et attaque le reste du temps.
+ * @return le bonus de défense pris (0 s'il n'a pas paré).
+ */
+static int tourBot(Personnage *bot, Personnage *joueur)
+{
+    int soin = premierSoin(bot);
+    if (soin != -1 && bot->pv * 100 < bot->pvMax * 30) {
+        utiliserObjet(bot, soin);
+        return 0;
+    }
+    if (bot->pv * 2 < bot->pvMax && rand() % 100 < 35) {
+        return seDefendre(bot);
+    }
+    attaquer(bot, joueur);
+    return 0;
+}
+
 void menuDuelSimple(Donjon *d)
 {
     int vivants = 0;
@@ -102,38 +149,66 @@ void menuDuelSimple(Donjon *d)
     }
 
     afficherTous(d);
-    int a = choisirCombattant(d, "Attaquant (numero) : ", -1);
+    int a = choisirCombattant(d, "Votre personnage (numero) : ", -1);
     if (a == -1) return;
-    int c = choisirCombattant(d, "Cible (numero) : ", a);
+    int c = choisirCombattant(d, "Adversaire, joue par le bot (numero) : ", a);
     if (c == -1) return;
 
     /* On travaille sur des pointeurs vers les éléments du tableau : les
      * PV modifiés par attaquer() sont donc ceux du donjon lui-même. */
-    Personnage *attaquant = &d->elements[a];
-    Personnage *cible = &d->elements[c];
+    Personnage *joueur = &d->elements[a];
+    Personnage *bot = &d->elements[c];
+    printf("\n%s affronte %s (bot) ! Combat tour par tour jusqu'au K.O.\n", joueur->nom, bot->nom);
 
-    printf("\n1. Une seule attaque\n2. Combat jusqu'au K.O. (tour par tour)\n");
-    int mode = lireEntier("Votre choix : ", 1, 2);
-    if (mode == -1) return;
+    /* Bonus de garde en cours : retiré au début du tour suivant de celui
+     * qui a paré (et en fin de combat). attaquer() inflige toujours au
+     * moins 1 dégât, donc le combat finit forcément. */
+    int gardeJoueur = 0, gardeBot = 0;
+    int fuite = 0;
+    for (int tour = 1; estVivant(joueur) && estVivant(bot); tour++) {
+        printf("\n-- Tour %d --\n", tour);
+        etatDuel(joueur, bot);
 
-    printf("\n");
-    if (mode == 1) {
-        attaquer(attaquant, cible);
-        return;
-    }
-
-    /* Combat complet : les deux personnages s'échangent les coups.
-     * attaquer() inflige toujours au moins 1 dégât, donc la boucle
-     * se termine forcément. */
-    int tour = 1;
-    while (estVivant(attaquant) && estVivant(cible)) {
-        printf("-- Tour %d --\n", tour++);
-        attaquer(attaquant, cible);
-        if (estVivant(cible)) {
-            attaquer(cible, attaquant);
+        /* Tour du joueur */
+        joueur->def -= gardeJoueur;
+        gardeJoueur = 0;
+        int action = 0;
+        for (;;) {
+            printf("1. Attaquer\n2. Se defendre\n3. Boire une potion\n0. Fuir\n");
+            action = lireEntier("Votre action : ", 0, 3);
+            if (action == 3 && premierSoin(joueur) == -1) {
+                printf("  Vous n'avez aucune potion.\n");
+                continue;
+            }
+            break;
         }
+        if (action <= 0) { /* fuite ou EOF */
+            printf("%s prend la fuite !\n", joueur->nom);
+            fuite = 1;
+            break;
+        }
+        if (action == 1) {
+            attaquer(joueur, bot);
+        } else if (action == 2) {
+            gardeJoueur = seDefendre(joueur);
+        } else {
+            utiliserObjet(joueur, premierSoin(joueur));
+        }
+        if (!estVivant(bot)) {
+            break;
+        }
+
+        /* Réponse du bot */
+        printf("> Tour du bot :\n");
+        bot->def -= gardeBot;
+        gardeBot = tourBot(bot, joueur);
     }
-    printf("\nVainqueur : %s !\n", estVivant(attaquant) ? attaquant->nom : cible->nom);
+
+    joueur->def -= gardeJoueur;
+    bot->def -= gardeBot;
+    if (!fuite) {
+        printf("\nVainqueur : %s !\n", estVivant(joueur) ? joueur->nom : bot->nom);
+    }
 }
 
 /** Sous-menu de l'inventaire d'un personnage (K.O. compris : une potion

@@ -27,8 +27,9 @@ int choisirCombattant(const Donjon *d, const char *invite, int exclu);
 /** Menu 3 : choix du combat (exploration, duel en équipe, duel 1 contre 1). */
 void menuCombat(Donjon *d, Progression *prog);
 
-/** Duel classique : attaque simple ou combat jusqu'au K.O. entre deux
- *  personnages (fonction attaquer() du sujet). */
+/** Duel classique 1 contre 1, tour par tour jusqu'au K.O. : le joueur
+ *  choisit son action (attaquer, se défendre, potion, fuir), puis le bot
+ *  qui joue l'adversaire répond (fonction attaquer() du sujet). */
 void menuDuelSimple(Donjon *d);
 
 /** Menu 4 : sauvegarde le donjon dans FICHIER_SAUVEGARDE. */
