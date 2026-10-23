@@ -10,10 +10,11 @@
 #include "donjon.h"
 #include "combat.h"
 #include "sauvegarde.h"
+#include "reseau.h"
 
 /** Écrans de l'application. */
 enum Ecran { ECRAN_MENU, ECRAN_HEROS, ECRAN_EDITEUR, ECRAN_EQUIPE, ECRAN_COMBAT, ECRAN_BOUTIQUE,
-             ECRAN_BESTIAIRE };
+             ECRAN_BESTIAIRE, ECRAN_EN_LIGNE };
 
 /** Onglets de l'éditeur de personnage. */
 enum OngletEditeur { ONGLET_IDENTITE, ONGLET_APPARENCE, ONGLET_STATS, NB_ONGLETS };
@@ -38,6 +39,21 @@ typedef struct {
     int defilement;                 /**< Défilement des héros disponibles   */
 } Preparation;
 
+/** Duel en ligne : connexion et héros des deux joueurs. */
+typedef struct {
+    Reseau net;
+    int heros;              /**< Indice de notre héros dans le donjon      */
+    char adresse[64];       /**< IP tapée pour rejoindre                  */
+    int saisieAdresse;      /**< 1 si le champ de l'IP a le focus         */
+    char ips[160];          /**< Nos adresses à donner à l'autre joueur   */
+    int bonjourEnvoye;      /**< Notre héros est parti                    */
+    int bonjourRecu;        /**< Le héros de l'adversaire est arrivé      */
+    unsigned graine;        /**< Hasard du duel, choisi par l'hôte        */
+    int manche;             /**< Numéro du duel (revanches)               */
+    Personnage moi;         /**< Copies envoyées / reçues                  */
+    Personnage adversaire;
+} EnLigne;
+
 typedef struct CombatGui CombatGui; /* défini dans gui_combat.c */
 
 /** Toute l'application graphique. */
@@ -59,6 +75,7 @@ typedef struct {
     int monstreBestiaire;   /**< Monstre affiché dans le bestiaire        */
     int etageBestiaire;     /**< Étage pour lequel ses stats sont calculées */
     int elementBestiaire;   /**< Élément mis en avant dans la table       */
+    EnLigne enLigne;        /**< Duel en ligne                            */
 } App;
 
 /** Demande un changement d'écran (avec fondu). */
@@ -85,14 +102,20 @@ void ecranBestiaire(App *app);
 /** Ouvre l'éditeur sur l'onglet Statistiques pour répartir les points. */
 void ouvrirAmelioration(App *app, int index);
 
-/** Prépare un duel local 1 contre 1 (un héros par joueur) et l'affiche. */
-void ouvrirDuel1v1(App *app);
+/** Écran du duel en ligne : héberger ou rejoindre par adresse IP. */
+void ecranEnLigne(App *app);
+
+/** Ouvre l'écran du duel en ligne. */
+void ouvrirEnLigne(App *app);
 
 /** Ouvre l'éditeur sur un nouveau héros (index -1) ou un héros existant. */
 void ouvrirEditeur(App *app, int index);
 
 /** Crée l'état graphique d'un combat (NULL si impossible). */
 CombatGui *combatGuiCreer(App *app);
+/** Crée le duel en ligne entre app->enLigne.moi et .adversaire (l'hôte est
+ *  le joueur 1), pour la manche app->enLigne.manche. */
+CombatGui *combatGuiCreerEnLigne(App *app);
 /** Libère l'état graphique du combat. */
 void combatGuiDetruire(CombatGui *cg);
 

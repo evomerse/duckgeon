@@ -427,10 +427,34 @@ static void decalerAction(Combattant *c, int pourcent)
     }
 }
 
-/** Nombre aléatoire réel entre a et b. */
-static double aleatoire(double a, double b)
+/* Générateur aléatoire propre au combat (xorshift32) : avec la même
+ * graine, deux machines tirent exactement les mêmes nombres, ce qui permet
+ * le duel en réseau (on n'y échange que les actions choisies). */
+static unsigned tirerBrut(Combat *cb)
 {
-    return a + (b - a) * rand() / (double)RAND_MAX;
+    unsigned x = cb->graine ? cb->graine : 0x9E3779B9u;
+    x ^= x << 13;
+    x ^= x >> 17;
+    x ^= x << 5;
+    cb->graine = x;
+    return x;
+}
+
+/** Entier aléatoire entre 0 et n - 1. */
+static int hasard(Combat *cb, int n)
+{
+    return n > 0 ? (int)(tirerBrut(cb) % (unsigned)n) : 0;
+}
+
+/** Nombre aléatoire réel entre a et b. */
+static double aleatoire(Combat *cb, double a, double b)
+{
+    return a + (b - a) * (tirerBrut(cb) / 4294967295.0);
+}
+
+void combatGraine(Combat *cb, unsigned graine)
+{
+    cb->graine = graine ? graine : 1;
 }
 
 /* ------------------------------------------------------------------ */
@@ -455,7 +479,7 @@ static void distribuerRecompenses(Combat *cb)
     /* Un objet par vague remportée, donné à un survivant au hasard. */
     cb->nbButins = 0;
     for (int v = 0; v < cb->nbVagues && n > 0; v++) {
-        Personnage *receveur = cb->c[allies[rand() % n]].p;
+        Personnage *receveur = cb->c[allies[hasard(cb, n)]].p;
         Objet butin = objetAleatoire();
         if (ajouterObjet(receveur, butin)) {
             cb->butins[cb->nbButins] = butin;
@@ -533,7 +557,7 @@ static void subirDegats(Combat *cb, int source, int cible, int degats,
 }
 
 /** Calcule les dégâts d'un coup à `pourcent` % de l'ATK de l'attaquant. */
-static int calculerDegats(const Combat *cb, int a, int c, int pourcent, int *critique)
+static int calculerDegats(Combat *cb, int a, int c, int pourcent, int *critique)
 {
     const Combattant *ca = &cb->c[a];
     const Combattant *cc = &cb->c[c];
@@ -571,11 +595,11 @@ static int calculerDegats(const Combat *cb, int a, int c, int pourcent, int *cri
         degats *= 1.0 + combatFatigue(cb) / 100.0;
     }
 
-    *critique = (rand() % 100) < chanceCritique(ca->p);
+    *critique = hasard(cb, 100) < chanceCritique(ca->p);
     if (*critique) {
         degats *= (ca->p->classe == VOLEUR) ? 2.0 : 1.5;
     }
-    degats *= aleatoire(0.92, 1.08);
+    degats *= aleatoire(cb, 0.92, 1.08);
     return degats < 1 ? 1 : (int)(degats + 0.5);
 }
 
@@ -821,7 +845,7 @@ static void genererVague(Combat *cb)
     int nb = n < 1 ? 1 : n;
     int caseBoss = nb >= 3 ? 1 : 0; /* le boss au centre */
     for (int k = 0; k < nb; k++) {
-        enum Monstre m = info->pool[rand() % info->taillePool];
+        enum Monstre m = info->pool[hasard(cb, info->taillePool)];
         if (boss && k == caseBoss) {
             m = info->boss;
         }
@@ -892,6 +916,7 @@ int combatInit(Combat *cb, Personnage *equipe[], int n, int etage)
 {
     memset(cb, 0, sizeof *cb);
     cb->mode = MODE_BOTS;
+    combatGraine(cb, (unsigned)rand());
     cb->etage = etage < 1 ? 1 : (etage > ETAGE_MAX ? ETAGE_MAX : etage);
     cb->nbVagues = combatEtage(cb->etage)->nbVagues;
     cb->vague = 1;
@@ -918,6 +943,7 @@ int combatInitDuel(Combat *cb, Personnage *equipe1[], int n1, Personnage *equipe
 {
     memset(cb, 0, sizeof *cb);
     cb->mode = MODE_DUEL;
+    combatGraine(cb, (unsigned)rand());
     cb->etage = 1;
     cb->nbVagues = cb->vague = 1;
     cb->sp[0] = cb->sp[1] = SP_DEPART;
@@ -1125,7 +1151,7 @@ static void executerCapacite(Combat *cb, int a, enum TypeAction action, int cibl
                     break;
                 }
                 cb->nbCoups = coup + 1;
-                frapper(cb, a, liste[rand() % n], 70, 10);
+                frapper(cb, a, liste[hasard(cb, n)], 70, 10);
             }
         }
         break;
@@ -1282,7 +1308,7 @@ int combatJouer(Combat *cb, int lanceur, enum TypeAction action, int cible)
 
 /** Choisit le héros visé par un monstre : les guerriers et paladins
  *  attirent davantage les coups. */
-static int choisirCibleMonstre(const Combat *cb)
+static int choisirCibleMonstre(Combat *cb)
 {
     int liste[COMBAT_MAX_ALLIES];
     int n = vivantsCamp(cb, 0, liste);
@@ -1293,7 +1319,7 @@ static int choisirCibleMonstre(const Combat *cb)
         poids[k] = (cl == PALADIN || cl == GUERRIER) ? 3 : 2;
         total += poids[k];
     }
-    int tirage = rand() % total;
+    int tirage = hasard(cb, total);
     for (int k = 0; k < n; k++) {
         if (tirage < poids[k]) {
             return liste[k];
@@ -1337,7 +1363,7 @@ void combatTourEnnemi(Combat *cb)
     }
 
     int chance = MONSTRES[m].chanceSpecial + (c->phase == 2 ? 20 : 0);
-    if ((rand() % 100) < chance) {
+    if (hasard(cb, 100) < chance) {
         journaliser(cb, "%s : %s", c->p->nom, MONSTRES[m].special);
         switch (MONSTRES[m].typeSpecial) {
         case SPECIAL_ZONE:
@@ -1358,7 +1384,7 @@ void combatTourEnnemi(Combat *cb)
         case SPECIAL_TOUS:
             for (int k = 0; k < n; k++) {
                 frapper(cb, a, allies[k], c->boss ? 90 : 70, 0);
-                if (c->boss && combatVivant(cb, allies[k]) && rand() % 2 == 0) {
+                if (c->boss && combatVivant(cb, allies[k]) && hasard(cb, 2) == 0) {
                     appliquerDot(&cb->c[allies[k]], c->p->atk / 2, 2, FEU);
                     ajouterEffet(cb, allies[k], EFFET_MALUS, 0, 0, FEU, "Brûlure");
                 }

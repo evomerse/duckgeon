@@ -52,6 +52,8 @@ src/gui_heros.c        écrans « Mes héros » et « Préparer l'expédition »
 src/gui_editeur.c      éditeur de personnage
 src/gui_combat.c       écran de combat
 src/gui_bestiaire.c    bestiaire et table des éléments
+src/gui_en_ligne.c     duel en ligne : héberger ou rejoindre par IP
+src/reseau.c           sockets TCP non bloquants, messages du duel en ligne
 ```
 
 La logique métier (`personnage`, `objet`, `inventaire`, `donjon`,
@@ -187,6 +189,11 @@ coiffe, cape et même barbe selon la personnalisation.
     tour avec les mêmes touches. Les héros sont **copiés** à PV pleins :
     duel amical, sans XP ni K.O. durable, et un même héros peut jouer des
     deux côtés. Bouton « Revanche » à la fin.
+  - *Duel en ligne* : 1 contre 1 entre deux PC. L'un héberge (son IP
+    s'affiche), l'autre tape cette IP. Le moteur a son propre générateur
+    aléatoire (`combatGraine`) : avec la même graine et les mêmes actions,
+    les deux machines calculent exactement le même combat, donc seules les
+    actions circulent (protocole simple, entiers écrits octet par octet).
 - **Combat** puis écran de fin (XP, montées de niveau, butin en mode bots ;
   équipe gagnante en duel).
 

@@ -108,8 +108,8 @@ void ecranMenu(App *app)
         || (guiTouche(g, SDLK_RETURN) && app->donjon.taille > 0)) {
         changerEcran(app, ECRAN_EQUIPE);
     }
-    if (bouton(g, bx, by + pas, 320, h, "Duel 1 contre 1 (local)", BOUTON_NORMAL, app->donjon.taille > 0)) {
-        ouvrirDuel1v1(app);
+    if (bouton(g, bx, by + pas, 320, h, "Duel en ligne (IP)", BOUTON_NORMAL, app->donjon.taille > 0)) {
+        ouvrirEnLigne(app);
     }
     if (bouton(g, bx, by + 2 * pas, 320, h, "Mes héros", BOUTON_NORMAL, 1)) {
         changerEcran(app, ECRAN_HEROS);
@@ -196,6 +196,7 @@ int main(int argc, char *argv[])
     if (app->prog.etageMax > ETAGE_MAX) app->prog.etageMax = ETAGE_MAX;
     app->prep.etage = app->prog.etageMax;
     app->prep.taille = 4;
+    reseauInit(&app->enLigne.net);
 
     if (!guiInit(&app->g, "Duckgeon - Chroniques des Canards")) {
         donjonLiberer(&app->donjon);
@@ -222,6 +223,7 @@ int main(int argc, char *argv[])
         case ECRAN_COMBAT: ecranCombat(app); break;
         case ECRAN_BOUTIQUE: ecranBoutique(app); break;
         case ECRAN_BESTIAIRE: ecranBestiaire(app); break;
+        case ECRAN_EN_LIGNE: ecranEnLigne(app); break;
         }
 
         /* Transition en fondu au noir. */
@@ -254,6 +256,8 @@ int main(int argc, char *argv[])
     sauvegarderProgression(FICHIER_PROGRESSION, &app->prog);
     combatGuiDetruire(app->combat);
     app->combat = NULL;
+    reseauEnvoyerQuitter(&app->enLigne.net);
+    reseauFermer(&app->enLigne.net);
     guiQuitter(g);
     donjonLiberer(&app->donjon);
     free(app);

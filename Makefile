@@ -11,8 +11,9 @@ SDL_LIBS   = $(shell pkg-config --libs sdl2 SDL2_ttf) -lm
 LOGIQUE = personnage objet inventaire saisie donjon sauvegarde boutique combat
 # Version console
 CONSOLE = main console_jeu
-# Version graphique (+ moteur de combat en équipe)
-GUI     = gui gui_formes gui_sprite gui_main gui_heros gui_editeur gui_combat gui_boutique gui_bestiaire
+# Version graphique (+ moteur de combat en équipe, duel en ligne)
+GUI     = gui gui_formes gui_sprite gui_main gui_heros gui_editeur gui_combat gui_boutique gui_bestiaire \
+          gui_en_ligne reseau
 
 OBJ_LOGIQUE = $(LOGIQUE:%=build/%.o)
 OBJ_CONSOLE = $(CONSOLE:%=build/%.o)

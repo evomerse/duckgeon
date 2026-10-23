@@ -19,11 +19,12 @@ graphique** (étages, boss, duels en équipe, bestiaire, boutique).
 1. [Les deux programmes](#les-deux-programmes)
 2. [Installation](#installation)
 3. [Comment jouer à Duckgeon](#comment-jouer-à-duckgeon)
-4. [Jouer dans le terminal (Le Donjon)](#jouer-dans-le-terminal-le-donjon)
-5. [Sauvegardes](#sauvegardes)
-6. [Modélisation Merise](#modélisation-merise)
-7. [Architecture du code](#architecture-du-code)
-8. [Développement](#développement)
+4. [Duel en ligne (deux PC)](#duel-en-ligne-deux-pc)
+5. [Jouer dans le terminal (Le Donjon)](#jouer-dans-le-terminal-le-donjon)
+6. [Sauvegardes](#sauvegardes)
+7. [Modélisation Merise](#modélisation-merise)
+8. [Architecture du code](#architecture-du-code)
+9. [Développement](#développement)
 
 ---
 
@@ -31,7 +32,7 @@ graphique** (étages, boss, duels en équipe, bestiaire, boutique).
 
 | Exécutable  | Nom          | Interface        | Contenu                                                                 |
 |-------------|--------------|------------------|-------------------------------------------------------------------------|
-| `./duckgeon`| **Duckgeon** | Graphique (SDL2) | Combat en équipe, 10 étages, boss, éditeur de canards, boutique, duel local |
+| `./duckgeon`| **Duckgeon** | Graphique (SDL2) | Combat en équipe, 10 étages, boss, éditeur de canards, boutique, duel local et en ligne |
 | `./donjon`  | **Le Donjon**| Terminal         | Menu du sujet + le jeu complet en texte : étages, boss, duel en équipe, bestiaire, éléments, boutique |
 
 Les deux partagent **la même logique** (`personnage.c`, `combat.c`, `donjon.c`,
@@ -105,6 +106,7 @@ Liberation, Arial). Si aucune n'est trouvée, placez un fichier
 | **Combat**               | Tour par tour, voir ci-dessous                                                   |
 | **Boutique**             | Acheter des cosmétiques avec le foie gras, les essayer et les équiper            |
 | **Bestiaire**            | Fiche de chaque monstre (stats à chaque étage, attaques, éléments) et table des éléments |
+| **Duel en ligne**        | 1 contre 1 entre deux PC : héberger (son IP s'affiche) ou rejoindre en tapant l'IP de l'hôte |
 
 ### Le combat
 
@@ -136,10 +138,11 @@ Le combat s'inspire de *Honkai: Star Rail* :
 | `F12`               | Capture d'écran (`capture-*.bmp`)   |
 
 **Duel local** : deux joueurs sur le même PC, chacun son tour, de 1 contre 1
-à 4 contre 4. Le bouton **Duel 1 contre 1 (local)** de l'écran titre prépare
-directement un 1v1 (un héros différent pour chaque joueur, modifiable avant
-de lancer). Les héros sont copiés à PV pleins : aucune conséquence sur le
-donjon.
+à 4 contre 4 (écran « Préparer le combat », mode duel). Les héros sont
+copiés à PV pleins : aucune conséquence sur le donjon.
+
+Pour jouer à deux sur **deux PC différents**, voir
+[Duel en ligne](#duel-en-ligne-deux-pc).
 
 ![Panneau d'action : nom et effet selon l'élément, efficacité contre la cible](docs/captures/combat_elements.png)
 
@@ -245,6 +248,126 @@ joueur, et un cosmétique acheté est disponible pour **tous** les héros.
 Dans la boutique, le héros choisi **essaie** l'article en direct. Une fois
 l'article acheté, *Équiper* le lui met ; il apparaît aussi dans l'éditeur.
 Avant l'achat, il y est affiché avec un cadenas.
+
+---
+
+## Duel en ligne (deux PC)
+
+Un 1 contre 1 entre deux joueurs, chacun sur son PC, avec ses propres héros.
+Bouton **Duel en ligne (IP)** de l'écran titre.
+
+### Lancer une partie
+
+1. Les deux joueurs ouvrent **Duel en ligne (IP)** et choisissent leur héros
+   (flèches sous l'aperçu).
+2. Le premier clique sur **Héberger** : ses adresses IP s'affichent, avec le
+   port **5050**. Il les donne à l'autre joueur.
+3. L'autre tape l'adresse dans **Rejoindre une partie** puis
+   **Se connecter** (ou Entrée).
+4. Le duel démarre sur les deux écrans. L'hôte est le joueur 1 (à gauche).
+   Mêmes touches qu'en solo ; quand ce n'est pas votre tour, l'écran affiche
+   *L'adversaire réfléchit...*.
+5. À la fin, **Revanche** relance un duel chez les deux joueurs ; **Quitter**
+   ou **Abandon** prévient l'autre (*Duel interrompu*).
+
+Le duel est amical : les héros sont copiés à PV pleins, rien n'est modifié
+dans la sauvegarde.
+
+### Vous êtes au même endroit (même Wi-Fi)
+
+Rien à installer : l'hôte donne son adresse locale (`192.168.x.x` ou
+`10.x.x.x`, affichée dans le jeu). Si l'autre n'arrive pas à se connecter,
+c'est en général le pare-feu de l'hôte qui bloque le port :
+
+```bash
+# Fedora (firewalld)
+sudo firewall-cmd --add-port=5050/tcp
+# Ubuntu (ufw)
+sudo ufw allow 5050/tcp
+```
+
+### Vous n'êtes pas au même endroit : Tailscale
+
+Chez soi, un PC est caché derrière la box : son adresse `192.168…` n'existe
+que sur son réseau local, et quelqu'un d'ailleurs ne peut pas la joindre.
+Plutôt que de configurer la box, le plus simple est
+**[Tailscale](https://tailscale.com)** (gratuit) : il crée un petit réseau
+privé chiffré entre vos machines, comme si elles étaient sur le même Wi-Fi,
+où qu'elles soient.
+
+1. **Les deux joueurs** installent Tailscale et se connectent :
+
+   ```bash
+   curl -fsSL https://tailscale.com/install.sh | sh   # Linux
+   sudo tailscale up                                  # ouvre un lien de connexion
+   ```
+
+   (macOS / Windows : application sur tailscale.com.)
+2. Les deux PC doivent être dans le **même réseau Tailscale** : soit le même
+   compte, soit l'hôte **partage sa machine** avec son ami depuis la console
+   Tailscale (*Machines → … → Share*), soit il l'invite dans son réseau.
+3. L'hôte clique sur **Héberger** : parmi les adresses affichées, celle en
+   **`100.x.x.x`** est son adresse Tailscale (aussi donnée par
+   `tailscale ip -4`).
+4. L'autre joueur tape cette adresse `100.x.x.x` et se connecte. Pas de
+   redirection de port, pas d'IP publique à donner.
+
+Vérifier que les deux machines se voient : `tailscale ping <adresse 100.x>`.
+Si la connexion est refusée alors que le ping passe, autoriser le port 5050
+dans le pare-feu de l'hôte (voir plus haut).
+
+**Sans Tailscale**, l'hôte peut aussi rediriger le port TCP 5050 de sa box
+vers son PC et donner son IP publique ; c'est plus compliqué et expose le
+port à Internet.
+
+### Comment ça marche
+
+Le duel en ligne repose sur une idée simple : **les deux programmes calculent
+chacun le même combat**, et ne s'échangent que les décisions des joueurs.
+
+```
+   Hôte (joueur 1)                              Invité (joueur 2)
+   ───────────────                              ─────────────────
+   Héberger : écoute le port 5050  ◄──── TCP ─── Se connecter à l'IP
+   BONJOUR (son héros + graine)   ────────────►
+                                  ◄──────────── BONJOUR (son héros)
+   combat(J1, J2, graine)                       combat(J1, J2, graine)
+   son tour : joue « Q sur J2 »
+   ACTION (tour, lanceur, action, cible, empreinte) ──►  rejoue la même action
+                                  ◄──────────── ACTION ... quand c'est son tour
+   ...                                          ...
+   REVANCHE (manche n) / QUITTER  ◄──────────►  dans les deux sens
+```
+
+- **Connexion** (`src/reseau.c`) : sockets TCP POSIX en mode **non
+  bloquant**, lus à chaque image (`reseauMaj`) : la fenêtre ne se fige
+  jamais pendant l'attente. Une connexion sans réponse est abandonnée après
+  10 secondes.
+- **Messages** : 2 octets de longueur, 1 octet de type, puis les données.
+  Les entiers sont écrits octet par octet et le héros champ par champ, donc
+  le format ne dépend ni de la machine ni du compilateur. Tout ce qui est
+  reçu est vérifié (classe, élément, apparence ramenés dans leurs bornes ;
+  l'action est validée par le moteur comme un clic local).
+- **Même hasard des deux côtés** : le moteur de combat a son propre
+  générateur aléatoire (`combatGraine`, xorshift32) au lieu de `rand()`.
+  L'hôte tire la graine et l'envoie dans son BONJOUR ; avec les mêmes héros,
+  la même graine et les mêmes actions, les critiques et les dégâts tombent
+  exactement pareil sur les deux PC (principe du *lockstep*, utilisé par
+  beaucoup de jeux de stratégie). Les particules de l'affichage gardent
+  `rand()` : elles ne touchent pas au combat.
+- **Mêmes héros** : chacun utilise pour lui-même la copie « telle que
+  l'autre la recevra » (`reseauPreparerHeros`), pour partir de données
+  identiques au bit près.
+- **Contrôle** : chaque action porte le numéro du tour et une **empreinte**
+  de l'état (PV, énergie, boucliers, points de compétence). Si elle ne
+  correspond pas à l'état local, le duel s'arrête avec un message de
+  désynchronisation au lieu de continuer sur deux parties différentes.
+- **Tour par tour** : une action reçue attend dans une file jusqu'à ce que
+  l'animation locale soit au même point, puis elle est jouée et animée comme
+  si l'adversaire avait cliqué sur ce PC.
+- **Revanche** : chaque duel a un numéro de manche ; la graine change à
+  chaque manche, et les messages d'une ancienne manche sont ignorés (les
+  deux joueurs peuvent cliquer *Revanche* en même temps sans problème).
 
 ---
 
@@ -615,6 +738,7 @@ include/                         src/
 ├── boutique.h     ─────────────  boutique.c     foie gras, catalogue, achats
 ├── saisie.h       ─────────────  saisie.c       saisies clavier sûres (console)
 ├── combat.h       ─────────────  combat.c       moteur de combat, éléments, étages, monstres, boss
+├── reseau.h       ─────────────  reseau.c       connexion TCP du duel en ligne
 ├── main.h         ─────────────  main.c         menu du terminal « Le Donjon »
 ├── console_jeu.h  ─────────────  console_jeu.c  le jeu complet en texte (étages, duels, bestiaire...)
 ├── gui.h          ─────────────  gui.c, gui_formes.c   fenêtre SDL, texte, widgets, formes
@@ -625,6 +749,7 @@ include/                         src/
                                   gui_combat.c   écran de combat et de victoire
                                   gui_boutique.c boutique
                                   gui_bestiaire.c bestiaire et table des éléments
+                                  gui_en_ligne.c duel en ligne (héberger / rejoindre)
 docs/
 ├── RAPPORT.md       rapport technique (choix, questions de réflexion, tests)
 └── captures/        captures d'écran

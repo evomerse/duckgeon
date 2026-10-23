@@ -189,6 +189,7 @@ typedef struct {
     int nbJournalTotal;         /**< Lignes écrites depuis le début (console) */
     unsigned touches;           /**< Cibles déjà marquées par l'élément pendant
                                      l'action en cours (bit = case)        */
+    unsigned graine;            /**< État du générateur aléatoire du combat */
 
     int xpGagnee;               /**< Récompenses (fin de combat)          */
     int pointsGagnes;           /**< Points de stats par survivant        */
@@ -260,6 +261,11 @@ int combatInit(Combat *cb, Personnage *equipe[], int n, int etage);
  * @return 1 si le duel a pu commencer.
  */
 int combatInitDuel(Combat *cb, Personnage *equipe1[], int n1, Personnage *equipe2[], int n2);
+
+/** Fixe la graine du hasard du combat (critiques, dégâts...). Deux combats
+ *  initialisés pareil et de même graine se déroulent à l'identique si on
+ *  leur fait jouer les mêmes actions : c'est ce qu'utilise le duel en ligne. */
+void combatGraine(Combat *cb, unsigned graine);
 
 /** Retourne 1 si le combattant i est présent et en vie. */
 int combatVivant(const Combat *cb, int i);

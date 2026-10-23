@@ -2,8 +2,10 @@
  * @file gui_combat.c
  * @brief Écran de combat tour par tour (style Honkai: Star Rail).
  *
- * Deux modes : contre les bots (monstres) ou duel local, où les deux
- * joueurs utilisent les mêmes commandes chacun leur tour.
+ * Deux modes : contre les bots (monstres) ou duel, soit local (les deux
+ * joueurs utilisent les mêmes commandes chacun leur tour), soit en ligne :
+ * chaque programme fait tourner le même combat avec la même graine, envoie
+ * les actions de son joueur et applique celles reçues de l'adversaire.
  *
  * Commandes :
  *   Q / clic  : attaque de base (2e appui = confirmer)
@@ -87,6 +89,13 @@ struct CombatGui {
     int foieGrasGagne;      /* foie gras gagné à la victoire */
     int dernierCamp;      /**< duel : camp du dernier tour (annonce)   */
     int revanche;         /**< duel : relancer le même duel            */
+
+    /* duel en ligne */
+    int enLigne;          /**< 1 : l'adversaire joue sur une autre machine */
+    int monCamp;          /**< camp du joueur de cette machine (0 ou 1)  */
+    int manche;           /**< numéro du duel (revanches)                */
+    Reseau *net;
+    char coupure[96];     /**< raison de la fin de la connexion          */
 };
 
 /* Couleurs des deux joueurs en duel. */
@@ -312,12 +321,44 @@ static void banniere(CombatGui *cg, const char *texte)
     cg->banniere = 1.8f;
 }
 
+/** Duel en ligne : 1 si c'est au joueur de cette machine de choisir. */
+static int aMoi(const CombatGui *cg)
+{
+    return !cg->enLigne || combatCamp(cg->cb.actif) == cg->monCamp;
+}
+
+/** Nom d'un camp en duel (« Joueur 1 », ou « Vous » en ligne). */
+static const char *nomCamp(const CombatGui *cg, int camp)
+{
+    if (cg->enLigne) return camp == cg->monCamp ? "Vous" : "Adversaire";
+    return camp == 0 ? "Joueur 1" : "Joueur 2";
+}
+
+/** Empreinte de l'état du combat : en ligne, les deux machines comparent
+ *  la leur avant chaque action pour détecter une désynchronisation. */
+static unsigned empreinte(const Combat *cb)
+{
+    unsigned h = 2166136261u ^ cb->graine;
+    for (int i = 0; i < COMBAT_MAX; i++) {
+        if (!cb->c[i].present) continue;
+        h = (h ^ (unsigned)cb->c[i].p->pv) * 16777619u;
+        h = (h ^ (unsigned)cb->c[i].energie) * 16777619u;
+        h = (h ^ (unsigned)cb->c[i].bouclier) * 16777619u;
+    }
+    h = (h ^ (unsigned)(cb->sp[0] * 8 + cb->sp[1])) * 16777619u;
+    return (h ^ (unsigned)cb->actif) * 16777619u;
+}
+
 /** Prépare la sélection par défaut pour le héros dont c'est le tour. */
 static void preparerTourJoueur(CombatGui *cg)
 {
     int camp = combatCamp(cg->cb.actif);
     if (cg->cb.mode == MODE_DUEL && camp != cg->dernierCamp) {
-        banniere(cg, camp == 0 ? "Au tour du joueur 1" : "Au tour du joueur 2");
+        if (cg->enLigne) {
+            banniere(cg, camp == cg->monCamp ? "À vous de jouer" : "Tour de l'adversaire");
+        } else {
+            banniere(cg, camp == 0 ? "Au tour du joueur 1" : "Au tour du joueur 2");
+        }
         cg->cible = -1; /* l'ancienne cible est dans le mauvais camp */
     }
     cg->dernierCamp = camp;
@@ -379,16 +420,46 @@ static void suite(CombatGui *cg)
     }
 }
 
-/** Lance l'action choisie par le joueur. */
-static void lancer(CombatGui *cg)
+/** Joue une action et lance son animation ; en ligne, une action de notre
+ *  joueur est aussi envoyée à l'adversaire. @return 1 si elle a été jouée. */
+static int jouerAction(CombatGui *cg, int lanceur, enum TypeAction action, int cible)
 {
-    int lanceur = cg->lanceur;
-    enum TypeAction action = cg->choix;
-    if (!combatJouer(&cg->cb, lanceur, action, cg->cible)) {
-        return;
+    int tour = cg->cb.tour;
+    unsigned controle = empreinte(&cg->cb);
+    if (!combatJouer(&cg->cb, lanceur, action, cible)) {
+        return 0;
+    }
+    if (cg->enLigne && combatCamp(lanceur) == cg->monCamp) {
+        reseauEnvoyerAction(cg->net, cg->manche, tour, lanceur, (int)action, cible, controle);
     }
     copierEffets(cg, lanceur, action, 0);
     allerPhase(cg, action == ACTION_ULTIME ? PHASE_CINEMATIQUE : PHASE_ACTION);
+    return 1;
+}
+
+/** Lance l'action choisie par le joueur. */
+static void lancer(CombatGui *cg)
+{
+    if (aMoi(cg)) {
+        jouerAction(cg, cg->lanceur, cg->choix, cg->cible);
+    }
+}
+
+/** Duel en ligne : applique l'action de l'adversaire en attente, dès que
+ *  notre combat en est au même point que le sien. */
+static void actionDistante(CombatGui *cg)
+{
+    const Message *m = reseauPremier(cg->net);
+    if (m == NULL || m->type != MSG_ACTION) {
+        return;
+    }
+    if (m->tour != cg->cb.tour || m->controle != empreinte(&cg->cb)
+        || m->action < 0 || m->action >= NB_ACTIONS
+        || combatCamp(m->lanceur) == cg->monCamp
+        || !jouerAction(cg, m->lanceur, (enum TypeAction)m->action, m->cible)) {
+        snprintf(cg->coupure, sizeof cg->coupure, "Les deux parties ne sont plus identiques (désynchronisation).");
+    }
+    reseauRetirer(cg->net);
 }
 
 /** Choisit une action (un 2e choix identique la confirme). */
@@ -436,6 +507,8 @@ static float instantCoup(int k)
 /*  Création / destruction                                            */
 /* ------------------------------------------------------------------ */
 
+static CombatGui *preparerScene(CombatGui *cg, int n, int n2);
+
 CombatGui *combatGuiCreer(App *app)
 {
     CombatGui *cg = calloc(1, sizeof *cg);
@@ -462,6 +535,38 @@ CombatGui *combatGuiCreer(App *app)
         free(cg);
         return NULL;
     }
+    return preparerScene(cg, n, n2);
+}
+
+CombatGui *combatGuiCreerEnLigne(App *app)
+{
+    EnLigne *el = &app->enLigne;
+    CombatGui *cg = calloc(1, sizeof *cg);
+    if (cg == NULL) {
+        perror("calloc");
+        return NULL;
+    }
+    /* L'hôte est le joueur 1 (camp 0) sur les deux machines. */
+    int hote = el->net.hote;
+    Personnage *j1 = hote ? &el->moi : &el->adversaire;
+    Personnage *j2 = hote ? &el->adversaire : &el->moi;
+    cg->etage = 1;
+    if (!combatInitDuel(&cg->cb, &j1, 1, &j2, 1)) {
+        free(cg);
+        return NULL;
+    }
+    /* même graine des deux côtés, différente à chaque revanche */
+    combatGraine(&cg->cb, el->graine ^ ((unsigned)el->manche * 2654435761u));
+    cg->enLigne = 1;
+    cg->monCamp = hote ? 0 : 1;
+    cg->manche = el->manche;
+    cg->net = &el->net;
+    return preparerScene(cg, 1, 1);
+}
+
+/** Fin commune de la création : état affiché, bannière, premier tour. */
+static CombatGui *preparerScene(CombatGui *cg, int n, int n2)
+{
     for (int i = 0; i < COMBAT_MAX; i++) {
         if (cg->cb.c[i].present) {
             cg->affPv[i] = (float)cg->cb.c[i].p->pv;
@@ -471,7 +576,10 @@ CombatGui *combatGuiCreer(App *app)
     }
     cg->cible = -1;
     char titre[48];
-    if (cg->cb.mode == MODE_DUEL) {
+    if (cg->enLigne) {
+        snprintf(titre, sizeof titre, "Duel en ligne");
+        cg->dernierCamp = -1; /* annonce « à vous » ou « adversaire » */
+    } else if (cg->cb.mode == MODE_DUEL) {
         snprintf(titre, sizeof titre, "Duel - %d contre %d", n, n2);
         cg->dernierCamp = combatCamp(cg->cb.actif); /* pas de 2e bannière */
     } else {
@@ -930,6 +1038,13 @@ static void dessinerActions(Gui *g, CombatGui *cg)
     if (cb->etat != COMBAT_TOUR_JOUEUR || cg->phase != PHASE_ATTENTE) {
         return;
     }
+    if (!aMoi(cg)) {
+        float t = g->temps / 1000.0f;
+        char attente[64];
+        snprintf(attente, sizeof attente, "L'adversaire réfléchit%s", (int)(t * 2) % 3 == 0 ? "." : (int)(t * 2) % 3 == 1 ? ".." : "...");
+        texteOmbre(g, POLICE_MOYENNE, attente, 1240, 640, COUL_TEXTE_DOUX, ALIGN_DROITE);
+        return;
+    }
     int l = cg->lanceur;
     enum Classe cl = cb->c[l].p->classe;
     SDL_Color cc = couleurClasse(cl);
@@ -938,8 +1053,9 @@ static void dessinerActions(Gui *g, CombatGui *cg)
     int camp = combatCamp(l);
     int sp = cb->sp[camp];
     if (cb->mode == MODE_DUEL) {
-        texte(g, POLICE_PETITE, camp == 0 ? "Points de compétence - Joueur 1" : "Points de compétence - Joueur 2",
-              1240, 520, camp == 0 ? COUL_J1 : COUL_J2, ALIGN_DROITE);
+        char libSp[64];
+        snprintf(libSp, sizeof libSp, "Points de compétence - %s", nomCamp(cg, camp));
+        texte(g, POLICE_PETITE, libSp, 1240, 520, camp == 0 ? COUL_J1 : COUL_J2, ALIGN_DROITE);
     } else {
         texte(g, POLICE_PETITE, "Points de compétence", 1240, 520, COUL_TEXTE_DOUX, ALIGN_DROITE);
     }
@@ -1010,7 +1126,7 @@ static void dessinerActions(Gui *g, CombatGui *cg)
 /** Marqueurs de cible et clic sur les combattants. */
 static void gererCibles(Gui *g, CombatGui *cg)
 {
-    if (cg->phase != PHASE_ATTENTE) {
+    if (cg->phase != PHASE_ATTENTE || !aMoi(cg)) {
         return;
     }
     Combat *cb = &cg->cb;
@@ -1104,8 +1220,9 @@ static void dessinerResultatDuel(App *app, CombatGui *cg)
     remplirRect(g, 0, 0, LARGEUR, HAUTEUR, rgba(4, 2, 12, (int)(228 * a)));
     float y0 = 90 + (1 - a) * 30;
     halo(g, LARGEUR / 2.0f, y0 + 50, 340, avecAlpha(c, (int)(70 * a)));
-    texteOmbre(g, POLICE_ENORME, gagnant == 0 ? "JOUEUR 1 GAGNE" : "JOUEUR 2 GAGNE", LARGEUR / 2.0f, y0,
-               avecAlpha(c, (int)(255 * a)), ALIGN_CENTRE);
+    const char *titre = gagnant == 0 ? "JOUEUR 1 GAGNE" : "JOUEUR 2 GAGNE";
+    if (cg->enLigne) titre = gagnant == cg->monCamp ? "VICTOIRE !" : "DÉFAITE";
+    texteOmbre(g, POLICE_ENORME, titre, LARGEUR / 2.0f, y0, avecAlpha(c, (int)(255 * a)), ALIGN_CENTRE);
     char buf[96];
     snprintf(buf, sizeof buf, "Duel remporté en %d actions", cb->tour);
     texte(g, POLICE_MOYENNE, buf, LARGEUR / 2.0f, y0 + 110, avecAlpha(COUL_TEXTE, (int)(255 * a)), ALIGN_CENTRE);
@@ -1123,7 +1240,21 @@ static void dessinerResultatDuel(App *app, CombatGui *cg)
         texte(g, POLICE_NORMALE, p->nom, x, 470, COUL_TEXTE, ALIGN_CENTRE);
     }
 
-    if (cg->tPhase > 0.6f) {
+    if (cg->tPhase > 0.6f && cg->enLigne) {
+        int relie = cg->coupure[0] == '\0';
+        if (!relie) {
+            texte(g, POLICE_NORMALE, cg->coupure, LARGEUR / 2.0f, 580, COUL_DANGER, ALIGN_CENTRE);
+        }
+        if (bouton(g, LARGEUR / 2.0f - 230, 620, 220, 50, "Quitter", BOUTON_NORMAL, 1)) {
+            reseauEnvoyerQuitter(cg->net);
+            reseauFermer(cg->net);
+            changerEcran(app, ECRAN_MENU);
+        }
+        if (bouton(g, LARGEUR / 2.0f + 10, 620, 220, 50, "Revanche !", BOUTON_PRINCIPAL, relie)
+            || (relie && guiTouche(g, SDLK_RETURN))) {
+            cg->revanche = 1;
+        }
+    } else if (cg->tPhase > 0.6f) {
         if (bouton(g, LARGEUR / 2.0f - 230, 620, 220, 50, "Changer les équipes", BOUTON_NORMAL, 1)) {
             changerEcran(app, ECRAN_EQUIPE);
         }
@@ -1242,6 +1373,10 @@ static void majPhase(App *app, CombatGui *cg)
 
     switch (cg->phase) {
     case PHASE_ATTENTE: {
+        if (!aMoi(cg)) {
+            actionDistante(cg); /* en ligne : on attend le choix de l'adversaire */
+            break;
+        }
         if (guiTouche(g, SDLK_q) || guiTouche(g, SDLK_a)) choisir(cg, cb->actif, ACTION_BASIQUE);
         if (guiTouche(g, SDLK_e)) choisir(cg, cb->actif, ACTION_COMPETENCE);
         /* 1..4 : ultimes de l'équipe qui joue */
@@ -1332,6 +1467,50 @@ static void majPhase(App *app, CombatGui *cg)
     majFx(cg, g->dt);
 }
 
+/** Duel en ligne : relance un duel pour la manche app->enLigne.manche. */
+static void relancerEnLigne(App *app)
+{
+    combatGuiDetruire(app->combat);
+    app->combat = combatGuiCreerEnLigne(app);
+    if (app->combat == NULL) {
+        reseauFermer(&app->enLigne.net);
+        changerEcran(app, ECRAN_MENU);
+    }
+}
+
+/**
+ * Duel en ligne : lit le réseau et traite les messages qui n'attendent pas
+ * leur tour (départ, revanche). Les actions restent dans la file jusqu'à
+ * ce que notre combat en soit au même point (voir actionDistante).
+ * @return 1 si le combat a été remplacé (revanche).
+ */
+static int traiterReseau(App *app, CombatGui *cg)
+{
+    reseauMaj(cg->net);
+    const Message *m;
+    while ((m = reseauPremier(cg->net)) != NULL) {
+        if (m->type == MSG_QUITTER) {
+            snprintf(cg->coupure, sizeof cg->coupure, "L'adversaire a quitté le duel.");
+        } else if (m->type == MSG_REVANCHE) {
+            if (m->manche > cg->manche) {
+                app->enLigne.manche = m->manche;
+                reseauRetirer(cg->net);
+                relancerEnLigne(app);
+                return 1;
+            }
+        } else if (m->type == MSG_ACTION && m->manche == cg->manche) {
+            break; /* sera jouée à son tour */
+        }
+        reseauRetirer(cg->net); /* message périmé ou sans objet */
+    }
+    if (cg->net->etat == RESEAU_ERREUR && cg->coupure[0] == '\0') {
+        snprintf(cg->coupure, sizeof cg->coupure, "%s", cg->net->erreur);
+    } else if (cg->net->etat == RESEAU_INACTIF && cg->coupure[0] == '\0') {
+        snprintf(cg->coupure, sizeof cg->coupure, "La connexion a été fermée.");
+    }
+    return 0;
+}
+
 void ecranCombat(App *app)
 {
     Gui *g = &app->g;
@@ -1341,6 +1520,16 @@ void ecranCombat(App *app)
         return;
     }
     Combat *cb = &cg->cb;
+
+    /* En ligne : messages de l'adversaire. Une coupure fige la partie. */
+    int clic = g->clic;
+    if (cg->enLigne && app->prochain == ECRAN_COMBAT) {
+        if (traiterReseau(app, cg)) return; /* revanche : nouveau combat */
+        if (cg->coupure[0] != '\0' && cg->phase != PHASE_RESULTAT) {
+            g->clic = g->clicDroit = 0;
+            g->nbTouches = 0;
+        }
+    }
 
     majPhase(app, cg);
 
@@ -1358,9 +1547,9 @@ void ecranCombat(App *app)
     char titre[64];
     if (duel) {
         int j = combatCamp(cb->actif);
-        texteOmbre(g, POLICE_MOYENNE, "DUEL", 20, 18, COUL_OR_CLAIR, ALIGN_GAUCHE);
-        texteOmbre(g, POLICE_MOYENNE, j == 0 ? "Joueur 1" : "Joueur 2", 100, 18, j == 0 ? COUL_J1 : COUL_J2,
-                   ALIGN_GAUCHE);
+        int lg = texteOmbre(g, POLICE_MOYENNE, cg->enLigne ? "DUEL EN LIGNE" : "DUEL", 20, 18, COUL_OR_CLAIR,
+                            ALIGN_GAUCHE);
+        texteOmbre(g, POLICE_MOYENNE, nomCamp(cg, j), 20 + lg + 14, 18, j == 0 ? COUL_J1 : COUL_J2, ALIGN_GAUCHE);
         if (combatFatigue(cb) > 0) {
             snprintf(titre, sizeof titre, "Tour %d  ·  Fatigue : dégâts +%d %%", cb->tour + 1, combatFatigue(cb));
         } else {
@@ -1386,7 +1575,7 @@ void ecranCombat(App *app)
     }
     dessinerActions(g, cg);
 
-    if (cg->phase == PHASE_ATTENTE) {
+    if (cg->phase == PHASE_ATTENTE && aMoi(cg)) {
         const char *aide = "Q basique · E compétence · 1-4 ultimes · ←/→ cible · Espace confirmer";
         if (duel) {
             texte(g, POLICE_PETITE, aide, 20, 72, COUL_TEXTE_DOUX, ALIGN_GAUCHE);
@@ -1396,7 +1585,13 @@ void ecranCombat(App *app)
     }
     if (cg->phase != PHASE_RESULTAT
         && bouton(g, LARGEUR - 120, 12, 100, 32, duel ? "Abandon" : "Fuir", BOUTON_DISCRET, 1)) {
-        changerEcran(app, ECRAN_EQUIPE);
+        if (cg->enLigne) {
+            reseauEnvoyerQuitter(cg->net);
+            reseauFermer(cg->net);
+            changerEcran(app, ECRAN_MENU);
+        } else {
+            changerEcran(app, ECRAN_EQUIPE);
+        }
     }
 
     if (cg->phase == PHASE_CINEMATIQUE) {
@@ -1405,11 +1600,30 @@ void ecranCombat(App *app)
     dessinerBanniere(g, cg);
     if (cg->phase == PHASE_RESULTAT) {
         dessinerResultat(app, cg);
-        if (cg->revanche) {
+        if (cg->revanche && cg->enLigne) {
+            /* nouvelle manche : l'adversaire la relance aussi en recevant le message */
+            app->enLigne.manche = cg->manche + 1;
+            reseauEnvoyerRevanche(cg->net, app->enLigne.manche);
+            relancerEnLigne(app);
+        } else if (cg->revanche) {
             /* même duel, mêmes équipes : on repart de zéro */
             combatGuiDetruire(app->combat);
             app->combat = combatGuiCreer(app);
             if (app->combat == NULL) changerEcran(app, ECRAN_EQUIPE);
+        }
+        return;
+    }
+
+    /* connexion perdue en plein duel */
+    if (cg->enLigne && cg->coupure[0] != '\0') {
+        g->clic = clic;
+        cg->banniere = 0;
+        remplirRect(g, 0, 0, LARGEUR, HAUTEUR, rgba(4, 2, 12, 235));
+        texteOmbre(g, POLICE_TITRE, "Duel interrompu", LARGEUR / 2.0f, 260, COUL_DANGER, ALIGN_CENTRE);
+        texte(g, POLICE_MOYENNE, cg->coupure, LARGEUR / 2.0f, 330, COUL_TEXTE, ALIGN_CENTRE);
+        if (bouton(g, LARGEUR / 2.0f - 120, 400, 240, 50, "Retour au menu", BOUTON_PRINCIPAL, 1)) {
+            reseauFermer(cg->net);
+            changerEcran(app, ECRAN_MENU);
         }
     }
 }
