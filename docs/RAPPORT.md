@@ -389,6 +389,75 @@ stocké dans le tableau. Cela évite aussi de copier toute la structure
 `const Personnage *` : on garde l'efficacité du pointeur tout en garantissant
 au compilateur que la fonction ne modifie pas le personnage.
 
+**À quoi servent `#ifndef`, `#define`, `#endif` (include guards) au début
+des fichiers `.h` ?**
+
+Un `.h` est recopié tel quel par le préprocesseur à chaque `#include`. Or un
+même en-tête peut être inclus plusieurs fois dans une seule unité de
+compilation, directement ou par ricochet : `main.c` inclut `personnage.h` et
+`sauvegarde.h`, et `sauvegarde.h` inclut lui-même `personnage.h`. Sans
+protection, `struct Personnage` serait alors définie deux fois et le
+compilateur s'arrêterait sur une erreur de redéfinition.
+
+```c
+#ifndef SAUVEGARDE_H      /* si SAUVEGARDE_H n'est pas encore défini...   */
+#define SAUVEGARDE_H      /* ...on le définit, et on lit le contenu       */
+/* déclarations */
+#endif                    /* à la 2e inclusion, tout est sauté            */
+```
+
+À la première inclusion, la macro n'existe pas : le contenu est lu et la
+macro est définie. Aux suivantes, elle existe déjà et le préprocesseur saute
+tout jusqu'au `#endif`. Chaque en-tête du projet a sa propre macro
+(`PERSONNAGE_H`, `SAUVEGARDE_H`, ...), qui doit rester unique. Cela permet
+d'inclure ce dont on a besoin sans se soucier de l'ordre ni des doublons.
+
+**Comment utiliser `fopen` et `malloc` avec `perror()` ou `assert()` pour
+anticiper les erreurs d'exécution ?**
+
+`fopen` renvoie `NULL` si le fichier ne s'ouvre pas (absent, droits,
+disque plein) et `malloc` renvoie `NULL` si la mémoire manque. Ces échecs
+dépendent de la machine et non de l'écriture du code : ils peuvent arriver
+même dans un programme correct. On teste donc **systématiquement** le
+retour avant de s'en servir, puis on appelle `perror("contexte")`, qui
+affiche le message du système (`errno`) précédé de notre contexte, par
+exemple `donjon.sav: No such file or directory`.
+
+```c
+FILE *f = fopen(nomFichier, "rb");
+if (f == NULL) {
+    perror(nomFichier);        /* « donjon.sav: No such file or directory » */
+    return 0;                  /* on remonte l'échec, on ne plante pas      */
+}
+Personnage *nouveau = malloc(cases * sizeof *nouveau);
+if (nouveau == NULL) {
+    perror("charger : malloc");
+    fclose(f);                 /* on libère ce qui est déjà ouvert          */
+    return 0;
+}
+```
+
+C'est ce que font `sauvegarder` et `charger`. En cas d'échec, elles
+rendent la main **sans toucher aux données déjà en mémoire** :
+`charger` ne remplace l'ancien tableau et `*n` qu'une fois la lecture
+entièrement réussie, et `sauvegarder` écrit dans un fichier temporaire pour
+ne jamais abîmer l'ancienne sauvegarde. Il faut aussi tester le retour de
+`fwrite` / `fread`, et fermer le fichier (`fclose`) sur tous les chemins de
+sortie.
+
+`assert(condition)` sert à autre chose : il vérifie une **hypothèse du
+programmeur** (pointeur jamais `NULL` à cet endroit, indice dans les
+bornes). Si elle est fausse, le programme s'arrête avec le fichier et la
+ligne. C'est utile pour détecter un bug pendant le développement, mais
+`assert` disparaît à la compilation avec `-DNDEBUG` et il tue le programme :
+il ne convient pas à une erreur « normale » comme un fichier absent, que
+l'utilisateur doit pouvoir récupérer. La règle retenue : `perror` + valeur
+de retour pour les erreurs d'exécution (fichiers, mémoire, données
+corrompues), `assert` pour les bugs de programmation. Ce projet n'emploie que
+la première forme : les paramètres invalides (`NULL`, taille négative)
+sont eux aussi refusés par un test explicite avec un message, ce qui évite
+qu'un `NDEBUG` ou un fichier modifié à la main ne fasse planter le jeu.
+
 ## Tests réalisés
 
 - Création de 5 personnages (déclenche un `realloc` de 4 à 8 cases).
