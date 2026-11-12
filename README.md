@@ -496,7 +496,7 @@ flowchart TD
     I --> M["Afficher le menu (0 à 12)"]
     M --> S{"Saisie valide ?"}
     S -- "non (texte, hors limites)" --> M
-    S -- "1 à 12" --> A["Lancer l'action choisie : créer, afficher, combattre, sauvegarder, charger..."] --> M
+    S -- "1 à 11" --> A["Lancer l'action choisie : créer, afficher, combattre, sauvegarder, charger..."] --> M
     S -- "0 ou Ctrl+D" --> F["Libérer la mémoire (free)"] --> Z(["Fin du programme"])
 ```
 
@@ -542,16 +542,10 @@ flowchart TD
     O4 --> R2(["Victoire"])
 ```
 
-**Opérations « Acheter un cosmétique » et « Améliorer un héros »** (menus 11 et 7)
+**Opération « Améliorer un héros »** (menu 7)
 
 ```mermaid
 flowchart LR
-    A(["Le joueur choisit un article"]) --> B{"Déjà acheté ?"}
-    B -- oui --> C["Équiper sur le héros choisi"]
-    B -- non --> D{"foieGras ≥ prix ?"}
-    D -- non --> X(["Achat impossible"])
-    D -- oui --> F["Débiter le prix, débloquer l'article pour tous les héros"] --> C
-
     H(["Le joueur répartit des points"]) --> I{"pointsStats > 0 ?"}
     I -- non --> Y(["Rien à dépenser"])
     I -- oui --> J["ameliorerStat : +8 PV, +1 ATK, +1 DEF ou +3 VIT, un point en moins"] --> I
@@ -588,7 +582,7 @@ flowchart TD
     main --> donjon["donjon.c<br/>tableau dynamique"]
     main --> sauve["sauvegarde.c<br/>fichiers binaires"]
     console --> combat["combat.c<br/>moteur en équipe, étages, monstres"]
-    console --> boutique["boutique.c<br/>foie gras, cosmétiques"]
+    console --> boutique["boutique.c<br/>foie gras gagné"]
     combat --> perso
     inv --> objet["objet.c<br/>objets, butin"]
     perso --> inv
@@ -798,6 +792,18 @@ joueur, et un cosmétique acheté est disponible pour **tous** les héros.
 Dans la boutique, le héros choisi **essaie** l'article en direct. Une fois
 l'article acheté, *Équiper* le lui met ; il apparaît aussi dans l'éditeur.
 Avant l'achat, il y est affiché avec un cadenas.
+
+**Opération « Acheter un cosmétique »** (Duckgeon uniquement, le terminal
+n'a pas de boutique)
+
+```mermaid
+flowchart LR
+    A(["Le joueur choisit un article"]) --> B{"Déjà acheté ?"}
+    B -- oui --> C["Équiper sur le héros choisi"]
+    B -- non --> D{"foieGras ≥ prix ?"}
+    D -- non --> X(["Achat impossible"])
+    D -- oui --> F["Débiter le prix, débloquer l'article pour tous les héros"] --> C
+```
 
 
 ## Duel en ligne (deux PC)
@@ -1254,7 +1260,7 @@ flowchart LR
 | Élément                 | Détail |
 |-------------------------|--------|
 | **Données**             | Même `struct Personnage`, même tableau dynamique `Donjon`, même `Progression` : le MCD de la partie 1 vaut pour les deux. |
-| **Règles**              | Mêmes classes, éléments, étages, monstres, boss, XP, points de stats, foie gras et boutique (règles RG1 à RG11). |
+| **Règles**              | Mêmes classes, éléments, étages, monstres, boss, XP, points de stats, foie gras (règles RG1 à RG11). La boutique de cosmétiques n'existe que dans Duckgeon. |
 | **Moteur de combat**    | `combat.c` fait tourner l'exploration et les duels en équipe dans les deux programmes. |
 | **Sauvegardes**         | Mêmes fichiers : une partie commencée dans le terminal se continue dans Duckgeon, et inversement. Le foie gras gagné dans le terminal se dépense dans la boutique de Duckgeon (la boutique n'existe que là). |
 | **Code compilé**        | Les modules de logique sont compilés une fois (`build/*.o`) et liés aux deux exécutables (voir le `Makefile`). |
