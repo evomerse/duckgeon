@@ -2,6 +2,7 @@
 build/
 donjon
 duckgeon
+donjon_sdl
 *.o
 
 # Sauvegardes et captures locales
