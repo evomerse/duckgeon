@@ -8,8 +8,8 @@ sauvegardes :
 | Partie | Programme | Interface | Réalisation |
 |--------|-----------|-----------|-------------|
 | [**Partie 1 : Le Donjon**](#partie-1--le-donjon-terminal) | `./donjon` | Terminal (texte) | Ma partie : le sujet (création, combat, inventaire, sauvegarde) et le jeu complet en mode texte |
-| [**Partie 2 : Duckgeon**](#partie-2--duckgeon-interface-graphique) | `./duckgeon` | Graphique (SDL2) | Bonus, réalisé avec l'aide de **Claude** (assistant IA d'Anthropic) |
-| [**Partie 3 : Donjon SDL**](#partie-3--donjon-sdl-interface-graphique-simple) | `./donjon_sdl` | Graphique simple (SDL2) | Le menu du terminal dans une fenêtre, avec le combat HSR et un mode automatique |
+| [**Partie 2 : Donjon SDL**](#partie-2--donjon-sdl-interface-graphique-simple) | `./donjon_sdl` | Graphique simple (SDL2) | Le menu du terminal dans une fenêtre, avec le combat HSR et un mode automatique |
+| [**Partie 3 : Duckgeon, la version IA**](#partie-3--duckgeon-la-version-ia-interface-graphique) | `./duckgeon` | Graphique (SDL2) | **Version IA** (bonus), réalisée avec l'aide de **Claude** (assistant IA d'Anthropic) |
 
 Une [comparaison des trois parties](#comparaison-des-trois-parties) montre ce
 qu'elles ont en commun et ce qui les distingue.
@@ -22,12 +22,12 @@ qu'elles ont en commun et ce qui les distingue.
    - [Sauvegardes](#sauvegardes)
    - [Modélisation Merise du terminal](#modélisation-merise-du-terminal)
    - [Architecture de la partie terminal](#architecture-de-la-partie-terminal)
-3. [Partie 2 : Duckgeon (interface graphique)](#partie-2--duckgeon-interface-graphique)
+3. [Partie 2 : Donjon SDL (interface graphique simple)](#partie-2--donjon-sdl-interface-graphique-simple)
+4. [Partie 3 : Duckgeon, la version IA (interface graphique)](#partie-3--duckgeon-la-version-ia-interface-graphique)
    - [Comment jouer à Duckgeon](#comment-jouer-à-duckgeon)
    - [Duel en ligne (deux PC)](#duel-en-ligne-deux-pc)
    - [Modélisation Merise de l'interface graphique](#modélisation-merise-de-linterface-graphique)
    - [Architecture de la partie graphique](#architecture-de-la-partie-graphique)
-4. [Partie 3 : Donjon SDL (interface graphique simple)](#partie-3--donjon-sdl-interface-graphique-simple)
 5. [Comparaison des trois parties](#comparaison-des-trois-parties)
 6. [Développement](#développement)
 
@@ -611,9 +611,111 @@ Tous ces modules sauf `main.c` et `console_jeu.c` forment la
 
 ---
 
-# Partie 2 : Duckgeon (interface graphique)
+# Partie 2 : Donjon SDL (interface graphique simple)
 
-> Partie bonus, réalisée **avec l'aide de Claude** (assistant IA d'Anthropic).
+> `./donjon_sdl` est la **suite directe du terminal** : le même menu (1 à 11),
+> le même jeu, mais dans une fenêtre SDL2. C'est un programme **à part** de
+> Duckgeon : il ne réutilise aucun fichier `gui_*`, seulement la logique
+> commune (personnages, combat, sauvegardes). Pas de canards dessinés ici :
+> des cubes de couleur. Chaque écran affiche ses commandes en bas, sous forme de touches encadrées (`Espace`, `Échap`...).
+
+```
+make sdl && ./donjon_sdl      # ou : make run-sdl
+```
+
+| Menu du terminal | Dans Donjon SDL |
+|------------------|-----------------|
+| 1. Créer un personnage | Nom, classe (avec ses stats et ses 3 capacités) et élément |
+| 2. Afficher les personnages | Fiche d'un héros : résumé, inventaire, stats, élément |
+| 3. Lancer un combat | Mode **Expédition** ou **Combat libre**, choix de l'étage, équipe de 1 à 4 héros (cartes numérotées), combat tour par tour |
+| 4 / 5. Sauvegarder / Charger | Mêmes fichiers `donjon.sav` et `progression.sav` |
+| 6 / 7 / 8. Inventaire, stats, élément | Onglets de la fiche du héros |
+| 9. Bestiaire | Fiche de chaque monstre et ses stats par étage |
+| 10. Table des éléments | Forces, faiblesses et effets de chaque élément |
+| 11. Se reposer au camp | Soigne toute l'équipe |
+| 7. Améliorer un personnage | Onglet **Stats** : niveau, XP, points à répartir (PV +8, ATK +1, DEF +1, VIT +3). Le menu, la liste des héros et l'onglet affichent les points disponibles |
+| Boutique (touche `B`) | Potions, armes et **parchemin d'oubli** (15 foie gras : remet les stats à zéro, les points sont rendus pour être réattribués ; s'utilise depuis le sac ou l'onglet Stats) payés en foie gras, rangées dans le sac du héros choisi (pas de cosmétiques : ils restent propres à Duckgeon) |
+
+## Le combat (style Honkai: Star Rail)
+
+C'est le même moteur que le mode « Explorer » du terminal (`combat.c`) :
+ordre des tours par vitesse, **points de compétence** partagés (l'attaque de
+base en rapporte, la compétence en coûte), **énergie** et ultime utilisable à
+tout moment, **faiblesses élémentaires** qui brisent la garde des monstres.
+
+- **Même disposition que Duckgeon**, avec des **cubes de couleur** à la place
+  des canards (couleur = élément, un monstre sur deux est plus « loin ») :
+  scène avec les héros à gauche et les monstres à droite, vie, garde et
+  faiblesses au-dessus de chaque monstre, file des tours à gauche, cartes
+  des héros en bas, points de compétence en losanges.
+- **Ultimes bien visibles** : chaque carte de héros a une bande `ULTIME` qui se
+  remplit avec l'énergie, devient dorée et pulse quand il est prêt (un rappel
+  s'affiche aussi au-dessus de la scène). L'ultime lancé est annoncé en grand
+  au milieu de l'écran.
+- **Animation d'ultime** : éclair, scène assombrie, héros qui rayonne, anneaux
+  et rayons dans la couleur de son élément, étincelles qui filent vers les
+  ennemis (ou retombent sur l'équipe pour un soin).
+- **Forces et faiblesses d'éléments** (+25 % / -20 %, comme dans le moteur) :
+  médaillon d'élément sur chaque combattant, éléments qui brisent la garde
+  d'un monstre, flèche verte ou rouge sur chaque cible selon l'attaque en
+  préparation, et phrase d'explication dans l'encadré de l'action
+  (« Feu contre Vent : très efficace »).
+- **Commandes** (rappelées en haut de l'écran de combat) :
+
+  | Touche | Action |
+  |--------|--------|
+  | `Q` | Attaque de base (+1 point de compétence) |
+  | `E` | Compétence (coûte 1 point) |
+  | `1` à `4` | Ultime du héros n° 1 à 4 (quand son énergie est pleine) |
+  | `←` `→` | Changer de cible |
+  | `Espace` / `Entrée` | Jouer l'action (un clic sur la cible fonctionne aussi) |
+  | `A` | Mode AUTO on / off |
+  | `Échap` | Fuir (ou quitter après le combat) |
+
+- **Mode AUTO** (bouton `AUTO`, touche `A`, modifiable à tout moment) :
+  les héros jouent seuls. L'ultime part dès qu'il est prêt (les soins
+  seulement si quelqu'un est blessé), la compétence sert quand les points
+  de compétence abondent ou qu'elle exploite une faiblesse, sinon attaque
+  de base ; les cibles sont les monstres sensibles à l'élément du héros,
+  puis les plus blessés.
+- **×2** accélère les animations.
+- Seuls les combattants **touchés** sursautent (un seul coup comme un ultime
+  sur plusieurs cibles) ; le sol, la file des tours et l'équipe restent fixes.
+- Une victoire donne XP, objets, points de stats et foie gras, et débloque
+  l'étage suivant, comme dans le terminal.
+
+### Expédition et combat libre
+
+L'écran « Lancer un combat » propose deux modes :
+
+| Mode | Règles |
+|------|--------|
+| **Expédition** | Vagues et boss de l'étage, déblocage de l'étage suivant. Chaque étage demande un **niveau moyen d'équipe** minimum (`combatNiveauRequis` : 1 + (étage - 1) × 3 / 2, soit 1, 2, 4, 5, 7, 8, 10, 11, 13, 14) ; un étage trop haut est grisé. |
+| **Combat libre** | Entraînement : 2 vagues, jamais de boss, aucun niveau requis (étages déjà débloqués seulement). XP, points de stats et butin comme d'habitude, mais foie gras réduit de moitié, sans bonus de premier passage et sans déblocage. |
+
+Le combat libre sert à monter ses héros pour atteindre les étages suivants.
+Ce niveau requis n'existe que dans Donjon SDL : le terminal et Duckgeon
+laissent entrer dans tous les étages débloqués.
+
+## Fichiers de la partie 2
+
+```
+include/sdl_ui.h       ─────────  sdl_ui.c       fenêtre, texte, boutons, barres
+include/sdl_donjon.h   ─────────  sdl_donjon.c   écrans du menu, fiche, bestiaire
+include/sdl_combat.h   ─────────  sdl_combat.c   écran de combat et mode AUTO
+                                  sdl_main.c      point d'entrée
+```
+
+Le jeu n'a volontairement pas la boutique de cosmétiques, le duel et le
+duel en ligne de Duckgeon : ils restent propres à Duckgeon (partie 3, la version IA).
+
+---
+
+# Partie 3 : Duckgeon, la version IA (interface graphique)
+
+> **Version IA** du projet : partie bonus, réalisée **avec l'aide de Claude**
+> (assistant IA d'Anthropic). Ce n'est pas ma partie « faite à la main » : c'est
+> une version plus ambitieuse, générée avec l'IA.
 > Elle ajoute une interface graphique **SDL2** par-dessus la logique de la
 > partie 1 : écrans, éditeur de canards, animations, duel local et duel en
 > ligne entre deux PC.
@@ -1235,91 +1337,6 @@ include/                         src/
 
 ---
 
-# Partie 3 : Donjon SDL (interface graphique simple)
-
-> `./donjon_sdl` est la **suite directe du terminal** : le même menu (1 à 11),
-> le même jeu, mais dans une fenêtre SDL2. C'est un programme **à part** de
-> Duckgeon : il ne réutilise aucun fichier `gui_*`, seulement la logique
-> commune (personnages, combat, sauvegardes). Pas de canards dessinés ici :
-> des cubes de couleur. Chaque écran affiche ses commandes en bas.
-
-```
-make sdl && ./donjon_sdl      # ou : make run-sdl
-```
-
-| Menu du terminal | Dans Donjon SDL |
-|------------------|-----------------|
-| 1. Créer un personnage | Nom, classe (avec ses stats et ses 3 capacités) et élément |
-| 2. Afficher les personnages | Fiche d'un héros : résumé, inventaire, stats, élément |
-| 3. Lancer un combat | Choix de l'étage, équipe de 1 à 4 héros, combat tour par tour |
-| 4 / 5. Sauvegarder / Charger | Mêmes fichiers `donjon.sav` et `progression.sav` |
-| 6 / 7 / 8. Inventaire, stats, élément | Onglets de la fiche du héros |
-| 9. Bestiaire | Fiche de chaque monstre et ses stats par étage |
-| 10. Table des éléments | Forces, faiblesses et effets de chaque élément |
-| 11. Se reposer au camp | Soigne toute l'équipe |
-| 7. Améliorer un personnage | Onglet **Stats** : niveau, XP, points à répartir (PV +8, ATK +1, DEF +1, VIT +3). Le menu, la liste des héros et l'onglet affichent les points disponibles |
-| Boutique (touche `B`) | Potions, armes et **parchemin d'oubli** (15 foie gras : remet les stats à zéro, les points sont rendus pour être réattribués ; s'utilise depuis le sac ou l'onglet Stats) payés en foie gras, rangées dans le sac du héros choisi (pas de cosmétiques : ils restent propres à Duckgeon) |
-
-## Le combat (style Honkai: Star Rail)
-
-C'est le même moteur que le mode « Explorer » du terminal (`combat.c`) :
-ordre des tours par vitesse, **points de compétence** partagés (l'attaque de
-base en rapporte, la compétence en coûte), **énergie** et ultime utilisable à
-tout moment, **faiblesses élémentaires** qui brisent la garde des monstres.
-
-- **Même disposition que Duckgeon**, avec des **cubes de couleur** à la place
-  des canards (couleur = élément, un monstre sur deux est plus « loin ») :
-  scène avec les héros à gauche et les monstres à droite, vie, garde et
-  faiblesses au-dessus de chaque monstre, file des tours à gauche, cartes
-  des héros en bas, points de compétence en losanges.
-- **Ultimes bien visibles** : chaque carte de héros a une bande `ULTIME` qui se
-  remplit avec l'énergie, devient dorée et pulse quand il est prêt (un rappel
-  s'affiche aussi au-dessus de la scène). L'ultime lancé est annoncé en grand
-  au milieu de l'écran.
-- **Animation d'ultime** : éclair, scène assombrie, héros qui rayonne, anneaux
-  et rayons dans la couleur de son élément, étincelles qui filent vers les
-  ennemis (ou retombent sur l'équipe pour un soin).
-- **Forces et faiblesses d'éléments** (+25 % / -20 %, comme dans le moteur) :
-  médaillon d'élément sur chaque combattant, éléments qui brisent la garde
-  d'un monstre, flèche verte ou rouge sur chaque cible selon l'attaque en
-  préparation, et phrase d'explication dans l'encadré de l'action
-  (« Feu contre Vent : très efficace »).
-- **Commandes** (rappelées en haut de l'écran de combat) :
-
-  | Touche | Action |
-  |--------|--------|
-  | `Q` | Attaque de base (+1 point de compétence) |
-  | `E` | Compétence (coûte 1 point) |
-  | `1` à `4` | Ultime du héros n° 1 à 4 (quand son énergie est pleine) |
-  | `←` `→` | Changer de cible |
-  | `Espace` / `Entrée` | Jouer l'action (un clic sur la cible fonctionne aussi) |
-  | `A` | Mode AUTO on / off |
-  | `Échap` | Fuir (ou quitter après le combat) |
-
-- **Mode AUTO** (bouton `AUTO`, touche `A`, modifiable à tout moment) :
-  les héros jouent seuls. L'ultime part dès qu'il est prêt (les soins
-  seulement si quelqu'un est blessé), la compétence sert quand les points
-  de compétence abondent ou qu'elle exploite une faiblesse, sinon attaque
-  de base ; les cibles sont les monstres sensibles à l'élément du héros,
-  puis les plus blessés.
-- **×2** accélère les animations.
-- Une victoire donne XP, objets, points de stats et foie gras, et débloque
-  l'étage suivant, comme dans le terminal.
-
-## Fichiers de la partie 3
-
-```
-include/sdl_ui.h       ─────────  sdl_ui.c       fenêtre, texte, boutons, barres
-include/sdl_donjon.h   ─────────  sdl_donjon.c   écrans du menu, fiche, bestiaire
-include/sdl_combat.h   ─────────  sdl_combat.c   écran de combat et mode AUTO
-                                  sdl_main.c      point d'entrée
-```
-
-Le jeu n'a volontairement pas la boutique de cosmétiques, le duel et le
-duel en ligne de Duckgeon : ils restent propres à la partie 2.
-
----
-
 # Comparaison des trois parties
 
 ```mermaid
@@ -1334,12 +1351,12 @@ flowchart LR
         CO["combat.c<br/>moteur, étages, monstres"]
         DO["donjon.c · sauvegarde.c · boutique.c"]
     end
-    subgraph P2["Partie 2 : Duckgeon (graphique)"]
+    subgraph P2["Partie 2 : Donjon SDL (graphique simple)"]
+        S["sdl_*.c<br/>menu, fiche, combat en cubes"]
+    end
+    subgraph P3["Partie 3 : Duckgeon, version IA (graphique)"]
         G["gui_*.c<br/>écrans, animations"]
         R["reseau.c<br/>duel en ligne"]
-    end
-    subgraph P3["Partie 3 : Donjon SDL (graphique simple)"]
-        S["sdl_*.c<br/>menu, fiche, combat en cubes"]
     end
     P1 --> COMMUN
     P2 --> COMMUN
@@ -1359,20 +1376,20 @@ flowchart LR
 
 ### Ce qui change
 
-| Aspect                  | Partie 1 : terminal                                  | Partie 2 : Duckgeon                                       | Partie 3 : Donjon SDL                                     |
+| Aspect                  | Partie 1 : terminal                                  | Partie 2 : Donjon SDL                                     | Partie 3 : Duckgeon (version IA)                          |
 |-------------------------|------------------------------------------------------|-----------------------------------------------------------|-----------------------------------------------------------|
-| Réalisation             | Moi                                                  | Avec l'aide de Claude                                     | Moi                                                       |
-| Affichage               | `printf`, barres de vie en `#`                       | Fenêtre SDL2, canards dessinés en vectoriel, animations   | Fenêtre SDL2, cubes de couleur, cartes et barres          |
-| Saisie                  | Numéros tapés au clavier (`lireEntier`), Ctrl+D quitte | Souris et touches (Q, E, 1-4, flèches, Échap)          | Souris et mêmes touches de combat ; commandes affichées à l'écran |
-| Menu                    | Les 11 entrées du sujet                              | 5 boutons (combattre, héros, créer, boutique, quitter)    | Les mêmes 11 entrées que le terminal                      |
-| Création d'un héros     | Nom, classe, élément ; apparence tirée au hasard     | Éditeur à onglets : apparence complète et 10 points bonus | Nom, classe, élément (le héros est un cube de la couleur de son élément) |
-| Combat                  | Tour par tour en texte (`combat.c`)                  | `combat.c` animé, duels, mode en ligne                    | `combat.c` en scène de cubes, **mode combat automatique** |
-| Duel 1 contre 1         | Duel classique du sujet (`attaquer()`) contre un bot | Duel en équipe du moteur, réglable de 1 contre 1 à 4 contre 4 | Pas de duel                                           |
-| Duel à deux joueurs     | Même clavier, chacun son tour                        | Même PC, ou **deux PC en ligne** (TCP)                    | Pas de duel                                               |
-| Boutique de cosmétiques | Non                                                  | Oui                                                       | Non                                                       |
-| Sauvegarde des héros    | Menu 4 (la progression, elle, est automatique)       | Automatique à chaque changement d'écran et en quittant    | Menu 4 (la progression est enregistrée après une victoire) |
+| Réalisation             | Moi                                                  | Moi                                                       | Version IA : avec l'aide de Claude                        |
+| Affichage               | `printf`, barres de vie en `#`                       | Fenêtre SDL2, cubes de couleur, cartes et barres          | Fenêtre SDL2, canards dessinés en vectoriel, animations   |
+| Saisie                  | Numéros tapés au clavier (`lireEntier`), Ctrl+D quitte | Souris et mêmes touches de combat ; commandes affichées à l'écran | Souris et touches (Q, E, 1-4, flèches, Échap)          |
+| Menu                    | Les 11 entrées du sujet                              | Les mêmes 11 entrées que le terminal                      | 5 boutons (combattre, héros, créer, boutique, quitter)    |
+| Création d'un héros     | Nom, classe, élément ; apparence tirée au hasard     | Nom, classe, élément (le héros est un cube de la couleur de son élément) | Éditeur à onglets : apparence complète et 10 points bonus |
+| Combat                  | Tour par tour en texte (`combat.c`)                  | `combat.c` en scène de cubes, **mode combat automatique** | `combat.c` animé, duels, mode en ligne                    |
+| Duel 1 contre 1         | Duel classique du sujet (`attaquer()`) contre un bot | Pas de duel                                           | Duel en équipe du moteur, réglable de 1 contre 1 à 4 contre 4 |
+| Duel à deux joueurs     | Même clavier, chacun son tour                        | Pas de duel                                               | Même PC, ou **deux PC en ligne** (TCP)                    |
+| Boutique de cosmétiques | Non                                                  | Non                                                       | Oui                                                       |
+| Sauvegarde des héros    | Menu 4 (la progression, elle, est automatique)       | Menu 4 (la progression est enregistrée après une victoire) | Automatique à chaque changement d'écran et en quittant    |
 | Dépendances             | Compilateur C seulement                              | SDL2 et SDL2_ttf                                          | SDL2 et SDL2_ttf                                          |
-| Modélisation            | MCD complet du jeu, MCT du menu et du duel classique | MCD ajouté (écrans, éditeur, combat animé, réseau), MCT de navigation et du duel en ligne | Même MCD que le terminal (aucune donnée ajoutée) |
+| Modélisation            | MCD complet du jeu, MCT du menu et du duel classique | Même MCD que le terminal (aucune donnée ajoutée) | MCD ajouté (écrans, éditeur, combat animé, réseau), MCT de navigation et du duel en ligne |
 
 ---
 
