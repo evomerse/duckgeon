@@ -57,7 +57,9 @@ static SDL_Rect cubeAnime(const CombatUi *c, int i)
     if (c->secousse[i] > 0) {
         /* le combattant touché sursaute (petit saut) et tremble un peu */
         double prog = 1.0 - c->secousse[i] / DUREE_COUP;
-        r.y -= (int)(16 * sin(M_PI * (prog > 1 ? 1 : prog)));
+        if (prog < 0) prog = 0;
+        if (prog > 1) prog = 1;
+        r.y -= (int)(14 * sin(M_PI * prog)); /* monte puis retombe : toujours 0 à la fin */
         r.x += ((int)(c->secousse[i] * 90) % 2 ? 4 : -4);
     }
     return r;
@@ -936,7 +938,7 @@ static void dessinerUltime(CombatUi *c, Ui *ui)
                     const Effet *e = &cb->effets[k];
                     if (e->type == EFFET_DEGATS && e->cible >= 0 && e->cible < COMBAT_MAX) {
                         SDL_Rect r = cubeFixe(cb, e->cible);
-                        c->secousse[e->cible] = DUREE_COUP * 1.4; /* seuls les ennemis touchés sursautent */
+                        c->secousse[e->cible] = DUREE_COUP; /* seuls les ennemis touchés sursautent */
                         ajouterParticules(c, r.x + r.w / 2, r.y + r.h / 2, 26, col, 340);
                     }
                 }
