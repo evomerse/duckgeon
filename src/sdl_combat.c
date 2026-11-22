@@ -1237,9 +1237,12 @@ int combatUiImage(CombatUi *c, Ui *ui, Progression *prog, double dt)
      * combattants et les effets tremblent, pour une base stable. */
     dessinerDecor(ui);
     dessinerFile(ui, cb);
-    if (c->tremblement > 0 && c->tremblementMax > 0) {
+    int tremble = c->tremblement > 0 && c->tremblementMax > 0;
+    SDL_Rect vue = { 0, 0, UI_LARGEUR, UI_HAUTEUR };
+    if (tremble) {
         double force = 5 * c->tremblement / c->tremblementMax;
-        SDL_Rect vue = { (int)(sin(ui->temps / 17.0) * force), (int)(cos(ui->temps / 23.0) * force * 0.6), UI_LARGEUR, UI_HAUTEUR };
+        vue.x = (int)(sin(ui->temps / 17.0) * force);
+        vue.y = (int)(cos(ui->temps / 23.0) * force * 0.6);
         SDL_RenderSetViewport(ui->rend, &vue);
     }
 
@@ -1259,6 +1262,7 @@ int combatUiImage(CombatUi *c, Ui *ui, Progression *prog, double dt)
         if (!cb->c[i].present) {
             continue;
         }
+        SDL_RenderSetViewport(ui->rend, (tremble && !combatEstAllie(i)) ? &vue : NULL); /* l'équipe ne tremble pas */
         dessinerCombattant(ui, c, i, !fini && i == cb->actif, 0, manuel);
         /* Un clic sur un cube valide le choisit et joue l'action. */
         if (manuel && ui->clic && c->attente <= 0 && combatCibleValide(cb, c->lanceur, c->action, i)
@@ -1273,12 +1277,14 @@ int combatUiImage(CombatUi *c, Ui *ui, Progression *prog, double dt)
         if (!cb->c[i].present) {
             continue;
         }
+        SDL_RenderSetViewport(ui->rend, (tremble && !combatEstAllie(i)) ? &vue : NULL);
         dessinerCombattant(ui, c, i, !fini && i == cb->actif, 1, manuel);
         if (touches & (1u << i)) {
             SDL_Rect r = cubeFixe(cb, i);
             uiRepere(ui, r.x + r.w / 2, combatEstAllie(i) ? r.y - 22 : r.y - 78, 9, i == c->cible ? UI_OR : UI_TEXTE);
         }
     }
+    SDL_RenderSetViewport(ui->rend, tremble ? &vue : NULL);
     dessinerUltime(c, ui);
     dessinerParticules(c, ui, dt);
     dessinerFlottants(c, ui, dt);
