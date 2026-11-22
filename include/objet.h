@@ -12,8 +12,9 @@
 #define NOM_OBJET_MAX 30
 
 /** Catégories d'objets. */
-enum TypeObjet { SOIN, ARME };
+enum TypeObjet { SOIN, ARME, PARCHEMIN };
 
+/* PARCHEMIN : parchemin d'oubli, remet les points de stats du porteur à répartir. */
 /** Un objet de l'inventaire. */
 typedef struct Objet {
     char nom[NOM_OBJET_MAX]; /**< Nom affiché ("" = emplacement vide)       */

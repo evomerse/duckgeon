@@ -326,6 +326,34 @@ int ameliorerStat(Personnage *p, enum Stat s)
     return 1;
 }
 
+int reinitialiserStats(Personnage *p)
+{
+    if (p == NULL || !classeValide(p->classe)) {
+        return 0;
+    }
+    int n = p->niveau > 1 ? p->niveau - 1 : 0;
+    int pvBase = STATS_CLASSE[p->classe].pv + n * GAIN_PV_NIVEAU;
+    int atkBase = STATS_CLASSE[p->classe].atk + n * GAIN_ATK_NIVEAU;
+    int defBase = STATS_CLASSE[p->classe].def + n * GAIN_DEF_NIVEAU;
+    int vitBase = STATS_CLASSE[p->classe].vit;
+
+    int rendus = 0;
+    if (p->pvMax > pvBase) rendus += (p->pvMax - pvBase) / BONUS_PV_POINT;
+    if (p->atk > atkBase) rendus += (p->atk - atkBase) / BONUS_ATK_POINT;
+    if (p->def > defBase) rendus += (p->def - defBase) / BONUS_DEF_POINT;
+    if (p->vit > vitBase) rendus += (p->vit - vitBase) / BONUS_VIT_POINT;
+    if (rendus == 0) {
+        return 0;
+    }
+    if (p->pvMax > pvBase) p->pvMax = pvBase;
+    if (p->atk > atkBase) p->atk = atkBase;
+    if (p->def > defBase) p->def = defBase;
+    if (p->vit > vitBase) p->vit = vitBase;
+    if (p->pv > p->pvMax) p->pv = p->pvMax;
+    p->pointsStats += rendus;
+    return rendus;
+}
+
 /* [DONJON - terminal] */
 void creerPersonnage(Personnage *p)
 {

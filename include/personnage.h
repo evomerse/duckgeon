@@ -230,4 +230,12 @@ int gainStat(enum Stat s);
  */
 int ameliorerStat(Personnage *p, enum Stat s);
 
+/**
+ * Reprend tous les points de stats dépensés : PV, ATK, DEF et VIT
+ * reviennent à ce que donnent la classe et le niveau, et les points
+ * dépensés sont rendus dans pointsStats (à réattribuer).
+ * @return nombre de points rendus (0 si rien n'avait été dépensé)
+ */
+int reinitialiserStats(Personnage *p);
+
 #endif /* PERSONNAGE_H */

@@ -26,7 +26,8 @@ int retirerObjet(Personnage *p, int index, Objet *retire);
 /**
  * Utilise l'objet d'indice index :
  *  - SOIN : rend des PV (sans dépasser le max, ranime un K.O.), consommé ;
- *  - ARME : équipée, l'ancienne arme retourne dans l'inventaire.
+ *  - ARME : équipée, l'ancienne arme retourne dans l'inventaire ;
+ *  - PARCHEMIN : reprend les points de stats dépensés (reinitialiserStats).
  * @return 1 si l'objet a été utilisé, 0 sinon.
  */
 int utiliserObjet(Personnage *p, int index);

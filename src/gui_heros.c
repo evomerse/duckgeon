@@ -208,14 +208,18 @@ static void ficheHeros(App *app, Personnage *p)
         SDL_Color teinte = o->type == SOIN ? COUL_VIE : rgba(150, 170, 255, 255);
         rectArrondi(g, cx, cy2, largeurChip, 26, 13, dessus ? rgba(70, 60, 120, 255) : rgba(40, 34, 74, 255));
         cercle(g, cx + 13, cy2 + 13, 6, teinte);
-        snprintf(buf, sizeof buf, "%s %s%d", o->nom, o->type == SOIN ? "+" : "ATK+", o->valeur);
+        if (o->type == PARCHEMIN) {
+            snprintf(buf, sizeof buf, "%s (reset stats)", o->nom);
+        } else {
+            snprintf(buf, sizeof buf, "%s %s%d", o->nom, o->type == SOIN ? "+" : "ATK+", o->valeur);
+        }
         texte(g, POLICE_PETITE, buf, cx + 25, cy2 + 5, COUL_TEXTE, ALIGN_GAUCHE);
         if (dessus) {
             g->survolCliquable = 1;
             char msg[96];
             if (g->clic) {
                 snprintf(msg, sizeof msg, "%s : %s %s", p->nom,
-                         o->type == SOIN ? "utilise" : "équipe", o->nom);
+                         o->type == ARME ? "équipe" : "utilise", o->nom);
                 utiliserObjet(p, i); /* même fonction que la console */
                 annoncer(msg);
                 break;

@@ -494,7 +494,7 @@ static void distribuerRecompenses(Combat *cb)
     int n = vivantsCamp(cb, 0, allies);
     /* Points de stats : 1 par victoire, 2 de plus si l'étage avait un boss
      * (en plus de ceux gagnés à chaque montée de niveau). */
-    cb->pointsGagnes = POINTS_PAR_VICTOIRE + (combatEtage(cb->etage)->boss != AUCUN_BOSS ? 2 : 0);
+    cb->pointsGagnes = POINTS_PAR_VICTOIRE + (!cb->libre && combatEtage(cb->etage)->boss != AUCUN_BOSS ? 2 : 0);
     for (int k = 0; k < n; k++) {
         Personnage *p = cb->c[allies[k]].p;
         gagnerXp(p, cb->xpGagnee);
@@ -872,7 +872,7 @@ static void genererVague(Combat *cb)
         cb->c[i].present = 0;
     }
 
-    int boss = (cb->vague == cb->nbVagues && info->boss != AUCUN_BOSS);
+    int boss = (!cb->libre && cb->vague == cb->nbVagues && info->boss != AUCUN_BOSS);
     int nb = n < 1 ? 1 : n;
     int caseBoss = nb >= 3 ? 1 : 0; /* le boss au centre */
     for (int k = 0; k < nb; k++) {
@@ -945,7 +945,14 @@ static void placerHeros(Combat *cb, int i, Personnage *p, int copie)
     c->av = avDeBase(c);
 }
 
-int combatInit(Combat *cb, Personnage *equipe[], int n, int etage)
+int combatNiveauRequis(int etage)
+{
+    if (etage < 1) etage = 1;
+    if (etage > ETAGE_MAX) etage = ETAGE_MAX;
+    return 1 + (etage - 1) * 3 / 2;
+}
+
+static int initialiser(Combat *cb, Personnage *equipe[], int n, int etage, int libre)
 {
     if (cb == NULL) {
         return 0;
@@ -957,7 +964,8 @@ int combatInit(Combat *cb, Personnage *equipe[], int n, int etage)
     cb->mode = MODE_BOTS;
     combatGraine(cb, (unsigned)rand());
     cb->etage = etage < 1 ? 1 : (etage > ETAGE_MAX ? ETAGE_MAX : etage);
-    cb->nbVagues = combatEtage(cb->etage)->nbVagues;
+    cb->libre = libre;
+    cb->nbVagues = libre ? 2 : combatEtage(cb->etage)->nbVagues;
     cb->vague = 1;
     cb->sp[0] = cb->sp[1] = SP_DEPART;
 
@@ -972,10 +980,21 @@ int combatInit(Combat *cb, Personnage *equipe[], int n, int etage)
     }
 
     genererVague(cb);
-    journaliser(cb, "Étage %d : %s - vague 1/%d", cb->etage, combatEtage(cb->etage)->nom, cb->nbVagues);
+    journaliser(cb, "%s %d : %s - vague 1/%d", libre ? "Combat libre, étage" : "Étage", cb->etage,
+                combatEtage(cb->etage)->nom, cb->nbVagues);
     cb->tourFini = 1;
     combatAvancer(cb);
     return 1;
+}
+
+int combatInit(Combat *cb, Personnage *equipe[], int n, int etage)
+{
+    return initialiser(cb, equipe, n, etage, 0);
+}
+
+int combatInitLibre(Combat *cb, Personnage *equipe[], int n, int etage)
+{
+    return initialiser(cb, equipe, n, etage, 1);
 }
 
 int combatInitDuel(Combat *cb, Personnage *equipe1[], int n1, Personnage *equipe2[], int n2)

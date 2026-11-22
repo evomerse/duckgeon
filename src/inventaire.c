@@ -51,6 +51,9 @@ int utiliserObjet(Personnage *p, int index)
         printf("%s utilise %s : +%d PV (%d/%d).%s\n", p->nom, objet.nom,
                p->pv - avant, p->pv, p->pvMax,
                avant == 0 ? " Il revient au combat !" : "");
+    } else if (objet.type == PARCHEMIN) {
+        int rendus = reinitialiserStats(p);
+        printf("%s utilise %s : %d point(s) de stats a repartir.\n", p->nom, objet.nom, rendus);
     } else {
         /* Échange : l'arme actuelle (s'il y en a une) prend la place libérée
          * par la nouvelle, donc l'inventaire ne peut pas déborder. */

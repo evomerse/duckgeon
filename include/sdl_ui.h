@@ -24,6 +24,8 @@ typedef struct {
     TTF_Font *petite;  /**< Détails (14 px)   */
     TTF_Font *normale; /**< Texte (18 px)     */
     TTF_Font *grande;  /**< Titres (30 px)    */
+    TTF_Font *enorme;  /**< Logo (64 px)      */
+    Uint32 temps;      /**< Millisecondes écoulées (animations)  */
 
     int sx, sy;        /**< Souris (coordonnées logiques)              */
     int clic;          /**< 1 : clic gauche relâché pendant cette image */
@@ -90,18 +92,52 @@ int uiOption(Ui *ui, SDL_Rect r, const char *texte, int choisi, int actif);
 /** Barre de progression (val sur max). */
 void uiBarre(Ui *ui, SDL_Rect r, int val, int max, SDL_Color c);
 
+/** Disque plein de centre (cx, cy). */
+void uiDisque(Ui *ui, int cx, int cy, int rayon, SDL_Color c);
+
+/** Rectangle plein aux coins arrondis. */
+void uiRectArrondi(Ui *ui, SDL_Rect r, int rayon, SDL_Color c);
+
+/** Rectangle à coins légèrement arrondis, avec dégradé vertical. */
+void uiRectDegrade(Ui *ui, SDL_Rect r, int rayon, SDL_Color haut, SDL_Color bas);
+
+/** Halo lumineux doux autour d'un rectangle (couleur c, intensité 0..255). */
+void uiLueur(Ui *ui, SDL_Rect r, SDL_Color c, int intensite);
+
 /**
- * Personnage « cube » : un carré de couleur avec un petit relief et deux
- * yeux. `droite` = 1 : il regarde vers la droite (héros), 0 : vers la gauche.
- * `lettre` (1 caractère, peut être vide) est écrite dessus.
+ * Héros : un cube de couleur avec yeux et un accessoire propre à sa
+ * classe (casque, chapeau de mage, auréole, arme...). `classe` est un
+ * enum Classe ; `droite` = 1 : il regarde vers la droite ; `phase` décale
+ * le petit balancement.
  */
-void uiCube(Ui *ui, SDL_Rect r, SDL_Color c, const char *lettre, int droite);
+void uiHeros(Ui *ui, SDL_Rect r, int classe, SDL_Color c, int droite, int vivant, double phase);
+
+/** Monstre : un cube à l'air méchant (boss : cornes + couronne). */
+void uiMonstre(Ui *ui, SDL_Rect r, SDL_Color c, int boss, int vivant);
+
+/** Petit médaillon d'élément (disque coloré + symbole). */
+void uiElementIcone(Ui *ui, int cx, int cy, int rayon, int element);
+
+/** Flèche pleine : haut = 1 vers le haut, 0 vers le bas. */
+void uiFleche(Ui *ui, int cx, int cy, int taille, int haut, SDL_Color c);
 
 /** Losange plein de centre (cx, cy) et de demi-largeur rayon. */
 void uiLosange(Ui *ui, int cx, int cy, int rayon, SDL_Color c);
 
 /** Repère triangulaire pointant vers le bas (cible). */
 void uiRepere(Ui *ui, int cx, int y, int taille, SDL_Color c);
+
+/** Touche de clavier encadrée (ex. « Espace »). Retourne sa largeur. */
+int uiTouche(Ui *ui, const char *touche, int x, int y);
+
+/** Largeur qu'occuperait uiTouche. */
+int uiLargeurTouche(Ui *ui, const char *touche);
+
+/**
+ * Rappel des commandes aligné à droite : spec = « Espace|jouer;Échap|retour »
+ * (chaque paire touche|action, séparées par des « ; »).
+ */
+void uiRaccourcis(Ui *ui, const char *spec, int xDroite, int y);
 
 /** Couleur plus claire / plus sombre (pourcentage, 100 = inchangée). */
 SDL_Color uiTeinte(SDL_Color c, int pourcent);

@@ -40,6 +40,8 @@ void afficherObjet(const Objet *o)
     }
     if (o->type == SOIN) {
         printf("%-16s (soin +%d PV)", o->nom, o->valeur);
+    } else if (o->type == PARCHEMIN) {
+        printf("%-16s (reset des stats)", o->nom);
     } else {
         printf("%-16s (arme +%d ATK)", o->nom, o->valeur);
     }

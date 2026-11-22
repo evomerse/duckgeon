@@ -14,6 +14,17 @@
 #include "sdl_ui.h"
 
 #define FLOTTANTS_MAX 24
+#define PARTICULES_MAX 128
+
+/** Petit éclat de couleur qui jaillit d'un coup et retombe. */
+typedef struct {
+    double x, y;   /**< Position (pixels)                       */
+    double vx, vy; /**< Vitesse (pixels par seconde)           */
+    double vie;    /**< Secondes restantes ; <= 0 = case libre */
+    double duree;  /**< Durée de vie au départ                 */
+    int taille;
+    SDL_Color couleur;
+} Particule;
 
 /** Petit texte qui monte au-dessus d'une carte (dégâts, soins...). */
 typedef struct {
@@ -27,6 +38,7 @@ typedef struct {
 typedef struct {
     Combat *cb;            /**< Alloué sur le tas (grosse structure)      */
     int etage;
+    int libre;             /**< 1 : combat libre (entraînement)           */
     int automatique;       /**< 1 : les héros jouent seuls                */
     int rapide;            /**< 1 : animations deux fois plus courtes     */
     enum TypeAction action;/**< Action choisie (tour manuel)              */
@@ -39,14 +51,26 @@ typedef struct {
     int recompenseFaite;   /**< 1 : la victoire a déjà été récompensée    */
     int foieGras;          /**< Foie gras gagné                           */
     int etageDebloque;     /**< Étage débloqué par la victoire (0 sinon)  */
+    char bandeau[128];      /**< Annonce d'un ultime (nom du héros et de l'ultime) */
+    SDL_Color bandeauCouleur;
+    double bandeauTemps;   /**< Secondes restantes d'affichage de l'annonce       */
+    double ultTemps;       /**< Secondes restantes de l'animation d'ultime */
+    double ultDuree;       /**< Durée totale de cette animation            */
+    int ultLanceur;        /**< Héros qui lance l'ultime                   */
+    int ultOffensif;       /**< 1 : l'ultime vise les ennemis              */
+    double bandeauDuree;   /**< Durée totale de l'annonce (pour l'animer)         */
+    int ultImpact;         /**< 1 : l'impact de l'ultime a déjà eu lieu           */
+    double tremblement;    /**< Secondes restantes de tremblement de l'écran      */
+    double tremblementMax; /**< Durée totale de ce tremblement                    */
     Flottant flottants[FLOTTANTS_MAX];
+    Particule particules[PARTICULES_MAX];
 } CombatUi;
 
 /**
  * Prépare un combat de l'équipe (pointeurs vers le donjon) à l'étage donné.
  * @return 1 si le combat commence, 0 sinon (mémoire ou équipe K.O.).
  */
-int combatUiDemarrer(CombatUi *c, Personnage *equipe[], int n, int etage, int automatique);
+int combatUiDemarrer(CombatUi *c, Personnage *equipe[], int n, int etage, int automatique, int libre);
 
 /** Libère le combat. */
 void combatUiLiberer(CombatUi *c);

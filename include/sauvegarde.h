@@ -26,6 +26,10 @@
 /** Fichier de sauvegarde utilisé par la console et l'interface graphique. */
 #define FICHIER_SAUVEGARDE "donjon.sav"
 
+/** Nombre d'emplacements de sauvegarde (slots) et taille maximale d'un nom. */
+#define SLOTS_MAX 5
+#define SLOT_NOM_MAX 32
+
 /** Fichier de la progression de l'interface graphique. */
 #define FICHIER_PROGRESSION "progression.sav"
 
@@ -73,6 +77,18 @@ int sauvegarderProgression(const char *nomFichier, const Progression *prog);
  * @return 1 si OK ; sinon *prog n'est pas modifié (premier lancement).
  */
 int chargerProgression(const char *nomFichier, Progression *prog);
+
+/**
+ * Chemin du fichier de l'emplacement `slot` (0..SLOTS_MAX-1). L'emplacement 0
+ * est FICHIER_SAUVEGARDE (donjon.sav), les autres sont donjon_slotN.sav.
+ */
+void cheminSlot(int slot, char *chemin, size_t taille);
+
+/** Lit le nom donné à un emplacement. Retourne 1 si un nom est enregistré. */
+int lireNomSlot(int slot, char *nom, size_t taille);
+
+/** Enregistre le nom d'un emplacement (à côté du fichier, extension .nom). 1 si OK. */
+int ecrireNomSlot(int slot, const char *nom);
 
 /** Retourne 1 si le fichier de sauvegarde existe (et peut être ouvert). */
 int sauvegardeExiste(const char *nomFichier);

@@ -180,6 +180,7 @@ typedef struct {
     int actif;                  /**< Combattant dont c'est le tour        */
     enum EtatCombat etat;
     int etage;                  /**< Difficulté (1..ETAGE_MAX)            */
+    int libre;                  /**< 1 : combat libre (2 vagues, sans boss) */
     int vague, nbVagues;        /**< Vague en cours (1..nbVagues)          */
     int tour;                   /**< Nombre d'actions jouées              */
     int tourFini;               /**< 1 : l'actif a fini, appeler combatAvancer */
@@ -257,6 +258,15 @@ const InfoEtage *combatEtage(int etage);
  * @return 1 si le combat a pu commencer, 0 si aucun héros n'est vivant.
  */
 int combatInit(Combat *cb, Personnage *equipe[], int n, int etage);
+
+/** Niveau moyen d'équipe conseillé pour entrer dans un étage (1..ETAGE_MAX). */
+int combatNiveauRequis(int etage);
+
+/**
+ * Combat libre : comme combatInit mais 2 vagues seulement et jamais de boss.
+ * Sert à s'entraîner (XP, butin) sans toucher à la progression.
+ */
+int combatInitLibre(Combat *cb, Personnage *equipe[], int n, int etage);
 
 /**
  * Duel local : équipe 1 (camp 0) contre équipe 2 (camp 1). Les héros sont

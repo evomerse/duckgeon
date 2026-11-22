@@ -1366,7 +1366,7 @@ static void dessinerResultat(App *app, CombatGui *cg)
     float by = 522;
     for (int k = 0; k < cb->nbButins; k++) {
         const Objet *o = &cb->butins[k];
-        snprintf(buf, sizeof buf, "Butin : %s (%s%d) → %s", o->nom, o->type == SOIN ? "soin +" : "ATK +",
+        snprintf(buf, sizeof buf, "Butin : %s (%s%d) → %s", o->nom, o->type == SOIN ? "soin +" : (o->type == PARCHEMIN ? "reset +" : "ATK +"),
                  o->valeur, cb->receveurs[k]);
         texte(g, POLICE_NORMALE, buf, LARGEUR / 2.0f, by + k * 24, COUL_OR_CLAIR, ALIGN_CENTRE);
     }

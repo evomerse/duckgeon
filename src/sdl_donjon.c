@@ -13,9 +13,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "boutique.h"
 #include "combat.h"
 #include "donjon.h"
 #include "inventaire.h"
+#include <sys/stat.h>
+#include <time.h>
+
 #include "personnage.h"
 #include "sauvegarde.h"
 #include "sdl_combat.h"
@@ -28,8 +32,17 @@
 
 enum Ecran {
     ECRAN_MENU, ECRAN_CREER, ECRAN_FICHE, ECRAN_PREPARATION, ECRAN_COMBAT,
-    ECRAN_BESTIAIRE, ECRAN_ELEMENTS, ECRAN_CONFIRMER
+    ECRAN_BESTIAIRE, ECRAN_ELEMENTS, ECRAN_CONFIRMER, ECRAN_BOUTIQUE, ECRAN_SLOTS
 };
+
+/** Ce qu'on sait d'un emplacement de sauvegarde (lu à l'ouverture de l'écran). */
+typedef struct {
+    int existe;
+    char nom[SLOT_NOM_MAX];
+    int nbHeros;
+    int niveauMax;
+    char date[24];
+} InfoSlot;
 
 enum Onglet { ONGLET_RESUME, ONGLET_INVENTAIRE, ONGLET_STATS, ONGLET_ELEMENT, NB_ONGLETS };
 
@@ -62,6 +75,13 @@ typedef struct {
     int equipe[COMBAT_MAX_ALLIES];
     int nbEquipe;
     int autoDefaut;
+    int modeLibre;    /**< 1 : combat libre (entraînement) */
+
+    /* emplacements de sauvegarde */
+    int slotCharger;  /**< 1 : on charge, 0 : on sauvegarde */
+    int slotSel;      /**< emplacement choisi, -1 : aucun    */
+    char nomPartie[SLOT_NOM_MAX];
+    InfoSlot slots[SLOTS_MAX];
 
     /* bestiaire */
     int monstreSel;
@@ -95,13 +115,34 @@ static int compterVivants(const Donjon *d)
 /** Titre de l'écran. */
 static void titre(App *a, const char *texte)
 {
+    uiTexte(&a->ui, a->ui.grande, texte, 22, 17, (SDL_Color){ 10, 10, 12, 255 });
     uiTexte(&a->ui, a->ui.grande, texte, 20, 14, UI_OR);
+}
+
+/** Petit foie gras dessiné (pastille rosée avec reflet). */
+static void iconeFoie(Ui *ui, int x, int y)
+{
+    uiRectArrondi(ui, (SDL_Rect){ x, y + 2, 26, 16 }, 8, (SDL_Color){ 150, 90, 90, 255 });
+    uiRectDegrade(ui, (SDL_Rect){ x, y, 26, 16 }, 8, (SDL_Color){ 250, 206, 190, 255 }, (SDL_Color){ 226, 150, 150, 255 });
+    uiRectArrondi(ui, (SDL_Rect){ x + 5, y + 3, 10, 3 }, 1, (SDL_Color){ 255, 255, 255, 140 });
+}
+
+/** Compteur de foie gras en haut à droite. */
+static void compteurFoie(App *a, int xDroite, int y)
+{
+    char buf[48];
+    snprintf(buf, sizeof buf, "%d foie gras", a->prog.foieGras);
+    int w = uiLargeur(a->ui.normale, buf);
+    SDL_Rect r = { xDroite - w - 56, y, w + 56, 36 };
+    uiRectArrondi(&a->ui, r, 6, (SDL_Color){ 10, 10, 12, 150 });
+    iconeFoie(&a->ui, r.x + 14, r.y + 10);
+    uiTexte(&a->ui, a->ui.normale, buf, r.x + 48, r.y + 7, UI_OR);
 }
 
 /** Rappel des commandes de l'écran, en bas à droite. */
 static void aide(App *a, const char *texte)
 {
-    uiTexteDroite(&a->ui, a->ui.petite, texte, UI_LARGEUR - 14, 618, UI_GRIS);
+    uiRaccourcis(&a->ui, texte, UI_LARGEUR - 14, 612);
 }
 
 /** Bouton « Retour » (ou touche Échap). Retourne 1 pour revenir au menu. */
@@ -120,7 +161,8 @@ static void ligneHeros(App *a, SDL_Rect r, const Personnage *p, int choisi, cons
     int vivant = estVivant(p);
     uiCadre(ui, r, choisi ? UI_PANNEAU2 : UI_PANNEAU, choisi ? UI_OR : UI_BORD);
     SDL_Color couleur = uiCouleurElement((int)p->element);
-    uiCube(ui, (SDL_Rect){ r.x + 8, r.y + 6, 26, 26 }, vivant ? couleur : uiTeinte(couleur, 40), "", 1);
+    uiHeros(ui, (SDL_Rect){ r.x + 12, r.y + 12, 22, 22 }, (int)p->classe, couleur, 1, vivant, 0);
+    uiElementIcone(ui, r.x + 36, r.y + 34, 6, (int)p->element);
     char buf[96];
     snprintf(buf, sizeof buf, "%s%s", marque, p->nom);
     uiTexte(ui, ui->normale, buf, r.x + 44, r.y + 3, vivant ? UI_TEXTE : UI_GRIS);
@@ -128,6 +170,10 @@ static void ligneHeros(App *a, SDL_Rect r, const Personnage *p, int choisi, cons
     uiTexte(ui, ui->petite, buf, r.x + 44, r.y + 24, UI_GRIS);
     uiBarre(ui, (SDL_Rect){ r.x + r.w - 96, r.y + r.h / 2 - 5, 84, 10 }, p->pv, p->pvMax,
             p->pv * 100 < p->pvMax * 30 ? UI_ROUGE : UI_VERT);
+    if (p->pointsStats > 0) {
+        snprintf(buf, sizeof buf, "+%d pts", p->pointsStats);
+        uiTexteDroite(ui, ui->petite, buf, r.x + r.w - 12, r.y + 2, UI_OR);
+    }
 }
 
 /**
@@ -236,33 +282,69 @@ static void lancerPreparation(App *a)
     a->ecran = ECRAN_PREPARATION;
 }
 
-static void sauvegarderDonjon(App *a)
+/** Relit les emplacements : nom, nombre de héros, niveau max et date. */
+static void lireSlots(App *a)
 {
-    if (donjonSauvegarder(&a->donjon, FICHIER_SAUVEGARDE)) {
-        dire(a, "%d personnage(s) sauvegardé(s) dans %s.", a->donjon.taille, FICHIER_SAUVEGARDE);
-    } else {
-        dire(a, "Échec de la sauvegarde.");
+    for (int k = 0; k < SLOTS_MAX; k++) {
+        InfoSlot *s = &a->slots[k];
+        char chemin[64];
+        memset(s, 0, sizeof *s);
+        cheminSlot(k, chemin, sizeof chemin);
+        if (!sauvegardeExiste(chemin)) {
+            continue;
+        }
+        s->existe = 1;
+        if (!lireNomSlot(k, s->nom, sizeof s->nom)) {
+            snprintf(s->nom, sizeof s->nom, "Partie %d", k + 1);
+        }
+        Personnage *liste = malloc(sizeof *liste);
+        int n = 0;
+        if (liste != NULL && chargerFichier(chemin, &liste, &n)) {
+            s->nbHeros = n;
+            for (int i = 0; i < n; i++) {
+                if (liste[i].niveau > s->niveauMax) {
+                    s->niveauMax = liste[i].niveau;
+                }
+            }
+        }
+        free(liste);
+        struct stat st;
+        if (stat(chemin, &st) == 0) {
+            time_t t = st.st_mtime;
+            strftime(s->date, sizeof s->date, "%d/%m/%Y %H:%M", localtime(&t));
+        }
     }
 }
 
-static void chargerDonjon(App *a)
+static void ouvrirSlots(App *a, int charger)
 {
-    if (donjonCharger(&a->donjon, FICHIER_SAUVEGARDE)) {
+    lireSlots(a);
+    a->slotCharger = charger;
+    a->slotSel = -1;
+    a->nomPartie[0] = '\0';
+    a->ecran = ECRAN_SLOTS;
+}
+
+static void sauvegarderDonjon(App *a, int slot)
+{
+    char chemin[64];
+    cheminSlot(slot, chemin, sizeof chemin);
+    if (donjonSauvegarder(&a->donjon, chemin) && ecrireNomSlot(slot, a->nomPartie)) {
+        dire(a, "« %s » sauvegardée (emplacement %d, %d personnage(s)).", a->nomPartie, slot + 1, a->donjon.taille);
+    } else {
+        dire(a, "Échec de la sauvegarde : l'emplacement %d n'a pas été modifié.", slot + 1);
+    }
+}
+
+static void chargerDonjon(App *a, int slot)
+{
+    char chemin[64];
+    cheminSlot(slot, chemin, sizeof chemin);
+    if (donjonCharger(&a->donjon, chemin)) {
         a->heroSel = 0;
-        dire(a, "%d personnage(s) chargé(s).", a->donjon.taille);
+        dire(a, "« %s » chargée : %d personnage(s).", a->slots[slot].nom, a->donjon.taille);
     } else {
         dire(a, "Échec du chargement : le donjon n'a pas été modifié.");
-    }
-}
-
-static void demanderCharger(App *a)
-{
-    if (!sauvegardeExiste(FICHIER_SAUVEGARDE)) {
-        dire(a, "Aucune sauvegarde trouvée (%s).", FICHIER_SAUVEGARDE);
-    } else if (a->donjon.taille > 0) {
-        a->ecran = ECRAN_CONFIRMER;
-    } else {
-        chargerDonjon(a);
     }
 }
 
@@ -280,8 +362,8 @@ static void choisirEntree(App *a, int n)
     case 0: ouvrirCreation(a); break;
     case 1: ouvrirFiche(a, ONGLET_RESUME); break;
     case 2: lancerPreparation(a); break;
-    case 3: sauvegarderDonjon(a); break;
-    case 4: demanderCharger(a); break;
+    case 3: ouvrirSlots(a, 0); break;
+    case 4: ouvrirSlots(a, 1); break;
     case 5: ouvrirFiche(a, ONGLET_INVENTAIRE); break;
     case 6: ouvrirFiche(a, ONGLET_STATS); break;
     case 7: ouvrirFiche(a, ONGLET_ELEMENT); break;
@@ -295,12 +377,63 @@ static void choisirEntree(App *a, int n)
 static void ecranMenu(App *a)
 {
     Ui *ui = &a->ui;
-    uiTexte(ui, ui->grande, "LE DONJON", 40, 14, UI_OR);
-    uiTexte(ui, ui->petite, "Gestion RPG - version graphique", 40, 52, UI_GRIS);
 
+    /* Bandeau du haut : titre à gauche, foie gras et boutique à droite. */
+    uiRectDegrade(ui, (SDL_Rect){ 0, 0, UI_LARGEUR, 70 }, 0, (SDL_Color){ 46, 46, 52, 255 }, (SDL_Color){ 30, 30, 34, 255 });
+    uiRect(ui, (SDL_Rect){ 0, 69, UI_LARGEUR, 2 }, UI_OR);
+    uiTexte(ui, ui->enorme, "LE DONJON", 24, 10, (SDL_Color){ 10, 10, 12, 255 });
+    uiTexte(ui, ui->enorme, "LE DONJON", 22, 7, (SDL_Color){ 255, 226, 150, 255 });
+    compteurFoie(a, UI_LARGEUR - 160, 17);
+    if (uiBouton(ui, (SDL_Rect){ UI_LARGEUR - 148, 14, 132, 42 }, "Boutique [B]", 1)) {
+        a->defilement = 0;
+        a->ecran = ECRAN_BOUTIQUE;
+    }
+
+    /* Salle de l'équipe : les héros alignés, avec leur fiche en dessous. */
+    uiRectDegrade(ui, (SDL_Rect){ 0, 71, UI_LARGEUR, 262 }, 0, (SDL_Color){ 30, 30, 34, 255 }, (SDL_Color){ 22, 22, 26, 255 });
+    for (int k = 0; k < 5; k++) {
+        /* torches au mur */
+        int tx = 90 + k * 205;
+        uiRect(ui, (SDL_Rect){ tx, 110, 6, 22 }, (SDL_Color){ 110, 78, 50, 255 });
+        uiRect(ui, (SDL_Rect){ tx - 3, 98, 12, 14 }, (SDL_Color){ 244, 150, 60, 255 });
+        uiRect(ui, (SDL_Rect){ tx, 92, 6, 10 }, (SDL_Color){ 255, 220, 110, 255 });
+    }
+    uiRectDegrade(ui, (SDL_Rect){ 0, 280, UI_LARGEUR, 53 }, 0, (SDL_Color){ 62, 62, 68, 255 }, (SDL_Color){ 34, 34, 38, 255 });
+    uiRect(ui, (SDL_Rect){ 0, 280, UI_LARGEUR, 2 }, (SDL_Color){ 120, 120, 128, 255 });
+    int n = a->donjon.taille < 4 ? a->donjon.taille : 4;
+    if (n == 0) {
+        uiTexteCentre(ui, ui->normale,
+                      "Le donjon est vide : créez un personnage (1) ou chargez une sauvegarde (5), puis lancez un combat (3).",
+                      (SDL_Rect){ 0, 160, UI_LARGEUR, 30 }, UI_TEXTE);
+        uiTexteCentre(ui, ui->petite, "Le mode AUTO fait jouer vos héros tout seuls.", (SDL_Rect){ 0, 192, UI_LARGEUR, 20 }, UI_GRIS);
+    }
+    for (int k = 0; k < n; k++) {
+        const Personnage *p = &a->donjon.elements[k];
+        int x = 70 + k * 222;
+        SDL_Rect cube = { x + 62, 182, 84, 84 };
+        uiHeros(ui, cube, (int)p->classe, uiCouleurElement((int)p->element), 1, estVivant(p), k * 1.3);
+        char buf[96];
+        uiTexte(ui, ui->normale, p->nom, x + 8, 292, UI_TEXTE);
+        uiElementIcone(ui, x + 196, 302, 8, (int)p->element);
+        snprintf(buf, sizeof buf, "%s niv. %d", nomClasse(p->classe), p->niveau);
+        uiTexte(ui, ui->petite, buf, x + 8, 313, UI_GRIS);
+        uiBarre(ui, (SDL_Rect){ x + 120, 311, 80, 8 }, p->pv, p->pvMax, UI_VERT);
+    }
+
+    /* Entrées du menu : une grille de 4 colonnes x 3 lignes. */
     for (int k = 0; k < NB_ENTREES; k++) {
-        SDL_Rect r = { 40, 84 + k * 42, 360, 38 };
-        if (uiBouton(ui, r, ENTREES[k], 1)) {
+        SDL_Rect r = { 20 + (k % 4) * 243, 360 + (k / 4) * 70, 233, 58 };
+        char etiquette[64];
+        int points = 0;
+        for (int h = 0; k == 6 && h < a->donjon.taille; h++) {
+            points += a->donjon.elements[h].pointsStats;
+        }
+        if (points > 0) {
+            snprintf(etiquette, sizeof etiquette, "7. Améliorer (+%d pts)", points);
+        } else {
+            snprintf(etiquette, sizeof etiquette, "%s", ENTREES[k]);
+        }
+        if (uiOption(ui, r, etiquette, k == 2 || points > 0, 1)) {
             choisirEntree(a, k);
         }
     }
@@ -309,34 +442,128 @@ static void ecranMenu(App *a)
         choisirEntree(a, ui->touche - SDLK_1);
     } else if (ui->touche == SDLK_0) {
         a->quitter = 1;
+    } else if (ui->touche == SDLK_b) {
+        a->defilement = 0;
+        a->ecran = ECRAN_BOUTIQUE;
     }
 
-    /* Podium de l'équipe (comme Duckgeon, mais en cubes). */
     char buf[96];
-    snprintf(buf, sizeof buf, "Foie gras : %d", a->prog.foieGras);
-    uiTexteDroite(ui, ui->normale, buf, UI_LARGEUR - 20, 16, UI_OR);
-
-    int n = a->donjon.taille < 4 ? a->donjon.taille : 4;
-    uiRect(ui, (SDL_Rect){ 450, 420, 510, 22 }, (SDL_Color){ 58, 52, 100, 255 });
-    uiRect(ui, (SDL_Rect){ 450, 420, 510, 4 }, (SDL_Color){ 110, 100, 170, 255 });
-    if (n == 0) {
-        uiParagraphe(ui, ui->normale,
-                     "Le donjon est vide. Créez un personnage (1) ou chargez une sauvegarde (5), "
-                     "puis lancez un combat (3). Le mode AUTO fait jouer vos héros tout seuls.",
-                     470, 200, 470, UI_GRIS);
-    }
-    for (int k = 0; k < n; k++) {
-        const Personnage *p = &a->donjon.elements[k];
-        SDL_Rect cube = { 480 + k * 120, 420 - 80, 80, 80 };
-        SDL_Color couleur = uiCouleurElement((int)p->element);
-        uiCube(ui, cube, estVivant(p) ? couleur : uiTeinte(couleur, 40), "", 1);
-        uiTexteCentre(ui, ui->petite, p->nom, (SDL_Rect){ cube.x - 20, 448, cube.w + 40, 18 }, UI_TEXTE);
-        uiTexteCentre(ui, ui->petite, nomClasse(p->classe), (SDL_Rect){ cube.x - 20, 466, cube.w + 40, 18 }, UI_GRIS);
-        uiBarre(ui, (SDL_Rect){ cube.x, 490, cube.w, 7 }, p->pv, p->pvMax, UI_VERT);
-    }
     snprintf(buf, sizeof buf, "%d héros dans le donjon  ·  étage max débloqué : %d", a->donjon.taille, a->prog.etageMax);
-    uiTexte(ui, ui->petite, buf, 40, 618, UI_GRIS);
-    aide(a, "Touches 1-9 : choisir une entrée · 0 : quitter · clic : valider");
+    uiTexte(ui, ui->petite, buf, 20, 618, UI_GRIS);
+    aide(a, "1-9|choisir;0|quitter;B|boutique;Clic|valider");
+}
+
+/* ------------------------------------------------------------------ */
+/*  Boutique : on dépense le foie gras en potions et en armes         */
+/* ------------------------------------------------------------------ */
+
+typedef struct {
+    Objet objet;
+    int prix;
+    const char *description;
+} Article;
+
+static const Article ARTICLES[] = {
+    { { "Potion mineure",  SOIN, 30 }, 12, "Rend 30 PV (ranime un héros K.O.)." },
+    { { "Grande potion",   SOIN, 60 }, 25, "Rend 60 PV (ranime un héros K.O.)." },
+    { { "Dague rouillee",  ARME,  2 }, 20, "Arme : +2 ATK. Mieux que les poings." },
+    { { "Epee longue",     ARME,  5 }, 45, "Arme : +5 ATK. Un classique fiable." },
+    { { "Baton runique",   ARME,  7 }, 65, "Arme : +7 ATK. Gravé de runes." },
+    { { "Hache de guerre", ARME,  9 }, 90, "Arme : +9 ATK. Lourde et dévastatrice." },
+    { { "Parchemin d'oubli", PARCHEMIN, 0 }, 15, "Rend tous les points de stats dépensés (à utiliser dans le sac)." },
+};
+#define NB_ARTICLES ((int)(sizeof ARTICLES / sizeof ARTICLES[0]))
+
+static void acheter(App *a, int article)
+{
+    const Article *art = &ARTICLES[article];
+    Personnage *p = &a->donjon.elements[a->heroSel];
+    if (a->prog.foieGras < art->prix) {
+        dire(a, "Pas assez de foie gras (%d requis).", art->prix);
+    } else if (!ajouterObjet(p, art->objet)) {
+        dire(a, "Le sac de %s est plein : libérez de la place.", p->nom);
+    } else {
+        a->prog.foieGras -= art->prix;
+        if (!sauvegarderProgression(FICHIER_PROGRESSION, &a->prog)) {
+            fprintf(stderr, "La progression n'a pas pu etre enregistree.\n");
+        }
+        dire(a, "%s achète : %s (dans son sac).", p->nom, art->objet.nom);
+    }
+}
+
+static void ecranBoutique(App *a)
+{
+    Ui *ui = &a->ui;
+    titre(a, "Boutique");
+    aide(a, "Clic|héros et article;Échap|retour");
+    compteurFoie(a, 840, 14);
+    uiTexte(ui, ui->petite, "Les achats vont dans le sac du héros choisi (équipez ou utilisez-les dans « Inventaire »).", 20, 56, UI_GRIS);
+
+    if (a->donjon.taille == 0) {
+        uiTexteCentre(ui, ui->normale, "Créez d'abord un personnage pour faire des achats.", (SDL_Rect){ 0, 260, UI_LARGEUR, 40 }, UI_TEXTE);
+    } else {
+        if (a->heroSel >= a->donjon.taille) {
+            a->heroSel = 0;
+        }
+        int clic = listeHeros(a, (SDL_Rect){ 20, 82, 300, 400 }, a->heroSel, NULL, 0);
+        if (clic >= 0) {
+            a->heroSel = clic;
+        }
+        const Personnage *p = &a->donjon.elements[a->heroSel];
+        SDL_Rect fiche = { 20, 492, 300, 112 };
+        uiCadre(ui, fiche, UI_PANNEAU, UI_BORD);
+        uiHeros(ui, (SDL_Rect){ fiche.x + 18, fiche.y + 44, 40, 40 }, (int)p->classe, uiCouleurElement((int)p->element), 1,
+                estVivant(p), 0);
+        char buf[96];
+        uiTexte(ui, ui->normale, p->nom, fiche.x + 92, fiche.y + 12, UI_TEXTE);
+        snprintf(buf, sizeof buf, "Sac : %d / %d", p->nbObjets, INVENTAIRE_MAX);
+        uiTexte(ui, ui->petite, buf, fiche.x + 92, fiche.y + 40, p->nbObjets >= INVENTAIRE_MAX ? UI_ROUGE : UI_GRIS);
+        snprintf(buf, sizeof buf, p->arme.nom[0] ? "Arme : %s (+%d)" : "Arme : aucune", p->arme.nom, p->arme.valeur);
+        uiTexte(ui, ui->petite, buf, fiche.x + 92, fiche.y + 60, UI_GRIS);
+        snprintf(buf, sizeof buf, "PV %d/%d", p->pv, p->pvMax);
+        uiTexte(ui, ui->petite, buf, fiche.x + 92, fiche.y + 80, UI_VERT);
+
+        for (int k = 0; k < NB_ARTICLES; k++) {
+            const Article *art = &ARTICLES[k];
+            SDL_Rect r = { 340 + (k % 2) * 322, 82 + (k / 2) * 131, 314, 125 };
+            int abordable = a->prog.foieGras >= art->prix;
+            int soin = art->objet.type == SOIN;
+            int parchemin = art->objet.type == PARCHEMIN;
+            uiCadre(ui, r, UI_PANNEAU, abordable ? UI_BORD : (SDL_Color){ 60, 60, 66, 255 });
+            /* vignette : fiole ou lame */
+            SDL_Rect vign = { r.x + 12, r.y + 12, 56, 56 };
+            uiRectDegrade(ui, vign, 6, (SDL_Color){ 64, 64, 70, 255 }, (SDL_Color){ 38, 38, 42, 255 });
+            if (parchemin) {
+                uiRectArrondi(ui, (SDL_Rect){ vign.x + 12, vign.y + 8, 32, 40 }, 3, (SDL_Color){ 236, 222, 178, 255 });
+                uiRect(ui, (SDL_Rect){ vign.x + 8, vign.y + 6, 40, 5 }, (SDL_Color){ 170, 130, 80, 255 });
+                uiRect(ui, (SDL_Rect){ vign.x + 8, vign.y + 45, 40, 5 }, (SDL_Color){ 170, 130, 80, 255 });
+                for (int l = 0; l < 3; l++) {
+                    uiRect(ui, (SDL_Rect){ vign.x + 17, vign.y + 16 + l * 8, 22, 2 }, (SDL_Color){ 120, 90, 60, 255 });
+                }
+            } else if (soin) {
+                SDL_Color liq = art->objet.valeur >= 60 ? (SDL_Color){ 240, 90, 120, 255 } : (SDL_Color){ 100, 210, 140, 255 };
+                uiRectArrondi(ui, (SDL_Rect){ vign.x + 22, vign.y + 8, 20, 14 }, 4, (SDL_Color){ 210, 210, 230, 255 });
+                uiRectDegrade(ui, (SDL_Rect){ vign.x + 12, vign.y + 20, 40, 38 }, 8, uiTeinte(liq, 125), uiTeinte(liq, 80));
+            } else {
+                int taille = 20 + art->objet.valeur * 3;
+                uiRectArrondi(ui, (SDL_Rect){ vign.x + 29, vign.y + 56 - taille, 6, taille }, 3, (SDL_Color){ 210, 216, 236, 255 });
+                uiRectArrondi(ui, (SDL_Rect){ vign.x + 20, vign.y + 52, 24, 5 }, 2, UI_OR);
+                uiRectArrondi(ui, (SDL_Rect){ vign.x + 29, vign.y + 56, 6, 8 }, 2, (SDL_Color){ 140, 90, 60, 255 });
+            }
+            uiTexte(ui, ui->normale, art->objet.nom, r.x + 86, r.y + 10, UI_TEXTE);
+                        uiParagraphe(ui, ui->petite, art->description, r.x + 86, r.y + 38, r.w - 100, UI_GRIS);
+            char prix[24];
+            snprintf(prix, sizeof prix, "%d", art->prix);
+            iconeFoie(ui, r.x + 14, r.y + r.h - 32);
+            uiTexte(ui, ui->normale, prix, r.x + 46, r.y + r.h - 34, abordable ? UI_OR : UI_ROUGE);
+            if (uiBouton(ui, (SDL_Rect){ r.x + r.w - 124, r.y + r.h - 40, 110, 32 }, "Acheter", abordable)) {
+                acheter(a, k);
+            }
+        }
+    }
+    if (boutonRetour(a)) {
+        a->ecran = ECRAN_MENU;
+    }
 }
 
 /* ------------------------------------------------------------------ */
@@ -385,7 +612,7 @@ static void ecranCreer(App *a)
 {
     Ui *ui = &a->ui;
     titre(a, "Créer un personnage");
-    aide(a, "Tapez le nom · clic : classe et élément · Entrée : créer · Échap : retour");
+    aide(a, "A-Z|nom;Clic|classe, élément;Entrée|créer;Échap|retour");
     saisirNom(a);
 
     uiTexte(ui, ui->normale, "Nom :", 20, 78, UI_GRIS);
@@ -409,9 +636,9 @@ static void ecranCreer(App *a)
     /* Aperçu de la classe. */
     SDL_Rect ap = { 450, 72, 530, 330 };
     uiCadre(ui, ap, UI_PANNEAU, UI_BORD);
-    uiCube(ui, (SDL_Rect){ ap.x + ap.w - 100, ap.y + 24, 70, 70 },
-           uiCouleurElement(a->elementChoisi >= 0 ? a->elementChoisi : (int)elementClasse((enum Classe)a->classeChoisie)),
-           "", 1);
+    uiHeros(ui, (SDL_Rect){ ap.x + ap.w - 100, ap.y + 40, 64, 64 }, a->classeChoisie,
+            uiCouleurElement(a->elementChoisi >= 0 ? a->elementChoisi : (int)elementClasse((enum Classe)a->classeChoisie)),
+            0, 1, 0);
     uiTexte(ui, ui->grande, nomClasse((enum Classe)a->classeChoisie), ap.x + 16, ap.y + 10, UI_TEXTE);
     uiParagraphe(ui, ui->normale, descriptionClasse((enum Classe)a->classeChoisie), ap.x + 16, ap.y + 54, ap.w - 130,
                  UI_GRIS);
@@ -497,13 +724,24 @@ static void ongletInventaire(App *a, Personnage *p, int x, int y)
         const Objet *o = &p->inventaire[i];
         SDL_Rect r = { x, y + 52 + i * 48, 620, 42 };
         uiCadre(ui, r, UI_PANNEAU, UI_BORD);
-        snprintf(buf, sizeof buf, "%s  (%s +%d)", o->nom, o->type == SOIN ? "soin" : "arme", o->valeur);
+        if (o->type == PARCHEMIN) {
+            snprintf(buf, sizeof buf, "%s  (remet les stats à zéro)", o->nom);
+        } else {
+            snprintf(buf, sizeof buf, "%s  (%s +%d)", o->nom, o->type == SOIN ? "soin" : "arme", o->valeur);
+        }
         uiTexte(ui, ui->normale, buf, r.x + 12, r.y + 10, UI_TEXTE);
-        if (uiBouton(ui, (SDL_Rect){ r.x + r.w - 232, r.y + 4, 120, 34 }, o->type == SOIN ? "Utiliser" : "Équiper", 1)) {
+        if (uiBouton(ui, (SDL_Rect){ r.x + r.w - 232, r.y + 4, 120, 34 }, o->type == ARME ? "Équiper" : "Utiliser", 1)) {
             char nom[NOM_OBJET_MAX];
             snprintf(nom, sizeof nom, "%s", o->nom);
+            int parchemin = o->type == PARCHEMIN;
+            int avant = p->pointsStats;
             if (utiliserObjet(p, i)) {
-                dire(a, "%s : %s utilisé.", p->nom, nom);
+                if (parchemin) {
+                    dire(a, "%s : %d point(s) de stats à réattribuer (onglet Stats).", p->nom, p->pointsStats - avant);
+                    a->onglet = ONGLET_STATS;
+                } else {
+                    dire(a, "%s : %s utilisé.", p->nom, nom);
+                }
             }
             return; /* le sac a changé : on redessine à l'image suivante */
         }
@@ -520,23 +758,46 @@ static void ongletInventaire(App *a, Personnage *p, int x, int y)
 static void ongletStats(App *a, Personnage *p, int x, int y)
 {
     Ui *ui = &a->ui;
-    char buf[96];
+    char buf[160];
+    snprintf(buf, sizeof buf, "Niveau %d  ·  XP %d / %d  ·  victoires : %d", p->niveau, p->xp, xpPourNiveauSuivant(p), p->victoires);
+    uiTexte(ui, ui->normale, buf, x, y, UI_TEXTE);
     snprintf(buf, sizeof buf, "%d point(s) de stats à répartir", p->pointsStats);
-    uiTexte(ui, ui->normale, buf, x, y, p->pointsStats > 0 ? UI_OR : UI_GRIS);
-    if (p->pointsStats == 0) {
-        uiTexte(ui, ui->petite, "Gagnez des combats pour en obtenir.", x, y + 28, UI_GRIS);
-    }
+    uiTexte(ui, ui->normale, buf, x, y + 28, p->pointsStats > 0 ? UI_OR : UI_GRIS);
+    uiTexteDroite(ui, ui->petite, "+2 points par niveau, +1 par étage nettoyé", x + 620, y + 32, UI_GRIS);
     for (int s = 0; s < NB_STATS; s++) {
-        SDL_Rect r = { x, y + 60 + s * 52, 620, 44 };
+        SDL_Rect r = { x, y + 62 + s * 52, 620, 44 };
         uiCadre(ui, r, UI_PANNEAU, UI_BORD);
         int valeur = s == STAT_PV ? p->pvMax : (s == STAT_ATK ? p->atk : (s == STAT_DEF ? p->def : p->vit));
         snprintf(buf, sizeof buf, "%s : %d", nomStat((enum Stat)s), valeur);
         uiTexte(ui, ui->normale, buf, r.x + 14, r.y + 11, UI_TEXTE);
+        if (s == STAT_ATK && p->arme.nom[0] != '\0') {
+            snprintf(buf, sizeof buf, "(%d avec %s)", attaqueTotale(p), p->arme.nom);
+            uiTexte(ui, ui->petite, buf, r.x + 230, r.y + 14, UI_GRIS);
+        }
         snprintf(buf, sizeof buf, "+%d", gainStat((enum Stat)s));
         if (uiBouton(ui, (SDL_Rect){ r.x + r.w - 110, r.y + 5, 98, 34 }, buf, p->pointsStats > 0)) {
             ameliorerStat(p, (enum Stat)s);
         }
     }
+    /* Parchemin d'oubli : réattribuer les points depuis le lobby. */
+    int parchemin = -1;
+    for (int i = 0; i < p->nbObjets; i++) {
+        if (p->inventaire[i].type == PARCHEMIN) {
+            parchemin = i;
+            break;
+        }
+    }
+    SDL_Rect bouton = { x, y + 276, 300, 40 };
+    if (uiBouton(ui, bouton, "Utiliser un parchemin d'oubli", parchemin >= 0)) {
+        int rendus = 0;
+        if (utiliserObjet(p, parchemin)) {
+            rendus = p->pointsStats;
+        }
+        dire(a, "%s : stats remises à zéro, %d point(s) à réattribuer.", p->nom, rendus);
+    }
+    uiParagraphe(ui, ui->petite, parchemin >= 0 ? "Remet PV, ATK, DEF et VIT à la valeur de la classe et du niveau."
+                                                : "Aucun parchemin dans le sac : on en achète à la boutique (touche B).",
+                 x + 312, y + 278, 300, UI_GRIS);
 }
 
 static void ongletElement(App *a, Personnage *p, int x, int y)
@@ -566,7 +827,7 @@ static void ecranFiche(App *a)
     Ui *ui = &a->ui;
     Donjon *d = &a->donjon;
     titre(a, "Personnages");
-    aide(a, "Clic : choisir un héros / un onglet · molette : défiler · Échap : retour");
+    aide(a, "Clic|héros, onglet;Molette|défiler;Échap|retour");
     if (d->taille == 0) {
         a->ecran = ECRAN_MENU;
         return;
@@ -582,8 +843,8 @@ static void ecranFiche(App *a)
 
     SDL_Rect pan = { 340, 76, 640, 528 };
     uiCadre(ui, pan, UI_PANNEAU, UI_BORD);
-    uiCube(ui, (SDL_Rect){ pan.x + 14, pan.y + 12, 54, 54 }, estVivant(p) ? uiCouleurElement((int)p->element)
-                                                                       : uiTeinte(uiCouleurElement((int)p->element), 40), "", 1);
+    uiHeros(ui, (SDL_Rect){ pan.x + 20, pan.y + 20, 46, 46 }, (int)p->classe, uiCouleurElement((int)p->element), 1,
+            estVivant(p), 0);
     uiTexte(ui, ui->grande, p->nom, pan.x + 82, pan.y + 8, UI_TEXTE);
     char buf[120];
     snprintf(buf, sizeof buf, "%s  niv. %d   %s", nomClasse(p->classe), p->niveau, nomElement(p->element));
@@ -596,7 +857,13 @@ static void ecranFiche(App *a)
     uiTexteDroite(ui, ui->petite, buf, pan.x + 620, pan.y + 66, UI_GRIS);
 
     for (int o = 0; o < NB_ONGLETS; o++) {
-        if (uiOption(ui, (SDL_Rect){ pan.x + 14 + o * 154, pan.y + 96, 148, 36 }, NOMS_ONGLETS[o], (int)a->onglet == o, 1)) {
+        char nomOnglet[40];
+        if (o == ONGLET_STATS && p->pointsStats > 0) {
+            snprintf(nomOnglet, sizeof nomOnglet, "Stats (+%d)", p->pointsStats);
+        } else {
+            snprintf(nomOnglet, sizeof nomOnglet, "%s", NOMS_ONGLETS[o]);
+        }
+        if (uiOption(ui, (SDL_Rect){ pan.x + 14 + o * 154, pan.y + 96, 148, 36 }, nomOnglet, (int)a->onglet == o, 1)) {
             a->onglet = (enum Onglet)o;
         }
     }
@@ -626,13 +893,102 @@ static int dansEquipe(const App *a, int i)
     return -1;
 }
 
+/** Ajoute ou retire un héros de l'équipe du combat. */
+static void basculerEquipe(App *a, int clic)
+{
+    int k = dansEquipe(a, clic);
+    if (k >= 0) {
+        for (int j = k; j + 1 < a->nbEquipe; j++) {
+            a->equipe[j] = a->equipe[j + 1];
+        }
+        a->nbEquipe--;
+    } else if (!estVivant(&a->donjon.elements[clic])) {
+        dire(a, "%s est K.O. : reposez-vous d'abord.", a->donjon.elements[clic].nom);
+    } else if (a->nbEquipe < COMBAT_MAX_ALLIES) {
+        a->equipe[a->nbEquipe++] = clic;
+    } else {
+        dire(a, "Une équipe compte 4 héros au maximum.");
+    }
+}
+
+/** Carte d'un héros (grand cube, nom, classe, PV) ; rang = place dans l'équipe (0 : non choisi). */
+static void carteHeros(App *a, SDL_Rect r, const Personnage *p, int rang)
+{
+    Ui *ui = &a->ui;
+    int vivant = estVivant(p);
+    int survol = uiDans(r, ui->sx, ui->sy);
+    SDL_Color element = uiCouleurElement((int)p->element);
+    if (rang > 0) {
+        uiLueur(ui, r, UI_OR, 70);
+    }
+    uiCadre(ui, r, rang > 0 ? UI_PANNEAU2 : UI_PANNEAU, rang > 0 ? UI_OR : (survol && vivant ? UI_GRIS : UI_BORD));
+    uiRect(ui, (SDL_Rect){ r.x + 4, r.y + 6, 4, r.h - 12 }, vivant ? element : UI_BORD);
+    uiHeros(ui, (SDL_Rect){ r.x + 20, r.y + 24, 38, 38 }, (int)p->classe, element, 1, vivant, 0);
+    char buf[96];
+    uiTexte(ui, ui->normale, p->nom, r.x + 72, r.y + 8, vivant ? UI_TEXTE : UI_GRIS);
+    snprintf(buf, sizeof buf, "%s · niv. %d", nomClasse(p->classe), p->niveau);
+    uiTexte(ui, ui->petite, buf, r.x + 72, r.y + 32, UI_GRIS);
+    uiElementIcone(ui, r.x + 80, r.y + 64, 7, (int)p->element);
+    uiBarre(ui, (SDL_Rect){ r.x + 96, r.y + 60, r.w - 112, 8 }, p->pv, p->pvMax,
+            p->pv * 100 < p->pvMax * 30 ? UI_ROUGE : UI_VERT);
+    if (rang > 0) {
+        snprintf(buf, sizeof buf, "%d", rang);
+        uiDisque(ui, r.x + r.w - 16, r.y + 16, 11, UI_OR);
+        uiTexteCentre(ui, ui->normale, buf, (SDL_Rect){ r.x + r.w - 27, r.y + 4, 22, 24 }, (SDL_Color){ 40, 26, 8, 255 });
+    } else if (!vivant) {
+        uiTexteDroite(ui, ui->petite, "K.O.", r.x + r.w - 10, r.y + 8, UI_ROUGE);
+    }
+}
+
+/** Grille de cartes (2 colonnes) défilante. Retourne l'indice cliqué ou -1. */
+static int grilleHeros(App *a, SDL_Rect zone)
+{
+    Donjon *d = &a->donjon;
+    Ui *ui = &a->ui;
+    const int hc = 86, ecart = 8;
+    int lignes = (zone.h + ecart) / (hc + ecart);
+    int total = (d->taille + 1) / 2;
+    int maxDef = total - lignes;
+    if (maxDef < 0) maxDef = 0;
+    if (uiDans(zone, ui->sx, ui->sy)) {
+        a->defilement -= ui->molette;
+    }
+    if (a->defilement > maxDef) a->defilement = maxDef;
+    if (a->defilement < 0) a->defilement = 0;
+
+    if (d->taille == 0) {
+        uiCadre(ui, zone, UI_PANNEAU, UI_BORD);
+        uiTexteCentre(ui, ui->normale, "Aucun héros : créez un personnage (1) au menu.", zone, UI_GRIS);
+        return -1;
+    }
+    int clique = -1;
+    for (int l = 0; l < lignes; l++) {
+        for (int c = 0; c < 2; c++) {
+            int i = (a->defilement + l) * 2 + c;
+            if (i >= d->taille) break;
+            SDL_Rect r = { zone.x + c * (zone.w / 2 + 3), zone.y + l * (hc + ecart), zone.w / 2 - 3, hc };
+            carteHeros(a, r, &d->elements[i], dansEquipe(a, i) + 1);
+            if (ui->clic && uiDans(r, ui->sx, ui->sy)) {
+                ui->clic = 0;
+                clique = i;
+            }
+        }
+    }
+    if (maxDef > 0) {
+        char buf[48];
+        snprintf(buf, sizeof buf, "Molette : %d/%d", a->defilement + 1, maxDef + 1);
+        uiTexteDroite(ui, ui->petite, buf, zone.x + zone.w, zone.y + zone.h + 2, UI_GRIS);
+    }
+    return clique;
+}
+
 static void lancerCombat(App *a)
 {
     Personnage *equipe[COMBAT_MAX_ALLIES];
     for (int k = 0; k < a->nbEquipe; k++) {
         equipe[k] = &a->donjon.elements[a->equipe[k]];
     }
-    if (combatUiDemarrer(&a->combat, equipe, a->nbEquipe, a->etageChoisi, a->autoDefaut)) {
+    if (combatUiDemarrer(&a->combat, equipe, a->nbEquipe, a->etageChoisi, a->autoDefaut, a->modeLibre)) {
         a->ecran = ECRAN_COMBAT;
     } else {
         dire(a, "Le combat n'a pas pu commencer.");
@@ -643,18 +999,34 @@ static void ecranPreparation(App *a)
 {
     Ui *ui = &a->ui;
     titre(a, "Lancer un combat");
-    aide(a, "Clic : étage et héros (1 à 4) · Entrée : lancer · A : mode auto · Échap : retour");
+    aide(a, "Clic|étage, héros;Entrée|lancer;A|auto;Échap|retour");
     if (a->ui.touche == SDLK_a) {
         a->autoDefaut = !a->autoDefaut;
     }
 
-    uiTexte(ui, ui->normale, "Étage", 20, 66, UI_GRIS);
+    /* Niveau moyen de l'équipe choisie (0 si personne). */
+    int niveauEquipe = 0;
+    for (int k = 0; k < a->nbEquipe; k++) {
+        niveauEquipe += a->donjon.elements[a->equipe[k]].niveau;
+    }
+    if (a->nbEquipe > 0) niveauEquipe /= a->nbEquipe;
+
+    /* Mode : expédition (progression, niveau requis) ou combat libre (entraînement). */
+    if (uiOption(ui, (SDL_Rect){ 20, 62, 222, 34 }, "Expédition", !a->modeLibre, 1)) {
+        a->modeLibre = 0;
+    }
+    if (uiOption(ui, (SDL_Rect){ 248, 62, 222, 34 }, "Combat libre", a->modeLibre, 1)) {
+        a->modeLibre = 1;
+    }
     for (int e = 1; e <= ETAGE_MAX; e++) {
         const InfoEtage *info = combatEtage(e);
-        SDL_Rect r = { 20, 94 + (e - 1) * 50, 450, 46 };
-        int libre = e <= a->prog.etageMax;
+        SDL_Rect r = { 20, 104 + (e - 1) * 47, 450, 43 };
+        int requis = combatNiveauRequis(e);
+        int debloque = e <= a->prog.etageMax;
+        int niveauOk = a->modeLibre || a->nbEquipe == 0 || niveauEquipe >= requis;
+        int libre = debloque && niveauOk;
         char buf[160];
-        if (libre) {
+        if (debloque) {
             snprintf(buf, sizeof buf, "%d. %s", e, info->nom);
         } else {
             snprintf(buf, sizeof buf, "%d. ?????  (verrouillé)", e);
@@ -662,36 +1034,68 @@ static void ecranPreparation(App *a)
         if (uiOption(ui, r, "", a->etageChoisi == e, libre)) {
             a->etageChoisi = e;
         }
-        uiTexte(ui, ui->normale, buf, r.x + 12, r.y + 4, libre ? UI_TEXTE : UI_GRIS);
-        if (libre) {
-            snprintf(buf, sizeof buf, "%d vagues%s%s%s", info->nbVagues, info->boss != NB_MONSTRES ? "  -  BOSS : " : "",
-                     info->boss != NB_MONSTRES ? nomMonstre(info->boss) : "",
-                     (a->prog.etagesNettoyes & (1u << (e - 1))) ? "  -  déjà nettoyé" : "");
-            uiTexte(ui, ui->petite, buf, r.x + 12, r.y + 26, UI_GRIS);
+        SDL_Color sombre = { 40, 26, 8, 255 };
+        int choisi = a->etageChoisi == e;
+        uiTexte(ui, ui->normale, buf, r.x + 12, r.y + 2, choisi ? sombre : (libre ? UI_TEXTE : UI_GRIS));
+        if (debloque) {
+            if (a->modeLibre) {
+                snprintf(buf, sizeof buf, "2 vagues, sans boss");
+            } else {
+                snprintf(buf, sizeof buf, "%d vagues%s%s%s", info->nbVagues, info->boss != NB_MONSTRES ? "  -  BOSS : " : "",
+                         info->boss != NB_MONSTRES ? nomMonstre(info->boss) : "",
+                         (a->prog.etagesNettoyes & (1u << (e - 1))) ? "  -  déjà nettoyé" : "");
+            }
+            uiTexte(ui, ui->petite, buf, r.x + 12, r.y + 23, choisi ? sombre : UI_GRIS);
+            if (!a->modeLibre) {
+                snprintf(buf, sizeof buf, "niv. %d requis", requis);
+                uiTexteDroite(ui, ui->petite, buf, r.x + r.w - 10, r.y + 4, niveauOk ? (choisi ? sombre : UI_VERT) : UI_ROUGE);
+            }
         }
     }
+    /* Si l'étage choisi n'est plus permis (équipe changée, mode changé), on recule. */
+    while (a->etageChoisi > 1 && !(a->etageChoisi <= a->prog.etageMax
+                                   && (a->modeLibre || a->nbEquipe == 0 || niveauEquipe >= combatNiveauRequis(a->etageChoisi)))) {
+        a->etageChoisi--;
+    }
 
-    uiTexte(ui, ui->normale, "Équipe : 1 à 4 héros en vie (cliquez pour choisir)", 500, 66, UI_GRIS);
-    int clic = listeHeros(a, (SDL_Rect){ 500, 94, 480, 360 }, -1, a->equipe, a->nbEquipe);
+    /* Sélection de l'équipe : cartes de héros + 4 emplacements numérotés. */
+    uiTexte(ui, ui->normale, "Équipe", 500, 66, UI_GRIS);
+    uiTexteDroite(ui, ui->petite, "1 à 4 héros en vie · clic pour choisir / retirer", UI_LARGEUR - 20, 70, UI_GRIS);
+    int clic = grilleHeros(a, (SDL_Rect){ 500, 94, 480, 282 });
     if (clic >= 0) {
-        int k = dansEquipe(a, clic);
-        if (k >= 0) {
-            for (int j = k; j + 1 < a->nbEquipe; j++) {
-                a->equipe[j] = a->equipe[j + 1];
+        basculerEquipe(a, clic);
+    }
+    for (int k = 0; k < COMBAT_MAX_ALLIES; k++) {
+        SDL_Rect r = { 500 + k * 122, 392, 114, 66 };
+        int rempli = k < a->nbEquipe;
+        uiCadre(ui, r, rempli ? UI_PANNEAU2 : UI_PANNEAU, rempli ? UI_OR : UI_BORD);
+        char num[4];
+        snprintf(num, sizeof num, "%d", k + 1);
+        uiDisque(ui, r.x + 14, r.y + 14, 9, rempli ? UI_OR : UI_PANNEAU2);
+        uiTexteCentre(ui, ui->petite, num, (SDL_Rect){ r.x + 5, r.y + 5, 18, 18 }, rempli ? (SDL_Color){ 40, 26, 8, 255 } : UI_GRIS);
+        if (rempli) {
+            const Personnage *p = &a->donjon.elements[a->equipe[k]];
+            uiHeros(ui, (SDL_Rect){ r.x + 40, r.y + 14, 26, 26 }, (int)p->classe, uiCouleurElement((int)p->element), 1, 1, k * 1.1);
+            uiTexteCentre(ui, ui->petite, p->nom, (SDL_Rect){ r.x, r.y + 44, r.w, 18 }, UI_TEXTE);
+            if (ui->clic && uiDans(r, ui->sx, ui->sy)) {
+                ui->clic = 0;
+                basculerEquipe(a, a->equipe[k]);
+                break;
             }
-            a->nbEquipe--;
-        } else if (!estVivant(&a->donjon.elements[clic])) {
-            dire(a, "%s est K.O. : reposez-vous d'abord.", a->donjon.elements[clic].nom);
-        } else if (a->nbEquipe < COMBAT_MAX_ALLIES) {
-            a->equipe[a->nbEquipe++] = clic;
         } else {
-            dire(a, "Une équipe compte 4 héros au maximum.");
+            uiTexteCentre(ui, ui->petite, "libre", (SDL_Rect){ r.x, r.y + 24, r.w, 20 }, UI_GRIS);
         }
     }
 
     char buf[96];
-    snprintf(buf, sizeof buf, "%d héros choisi(s) : les monstres seront aussi nombreux", a->nbEquipe);
-    uiTexte(ui, ui->petite, buf, 500, 482, UI_GRIS);
+    if (a->modeLibre) {
+        snprintf(buf, sizeof buf, "Combat libre : XP et butin, sans niveau requis ni déblocage (foie gras réduit)");
+    } else if (a->nbEquipe > 0) {
+        snprintf(buf, sizeof buf, "Niveau moyen de l'équipe : %d · l'étage suivant demande plus : entraînez-vous en libre", niveauEquipe);
+    } else {
+        snprintf(buf, sizeof buf, "Choisissez 1 à 4 héros : les monstres seront aussi nombreux");
+    }
+    uiTexte(ui, ui->petite, buf, 500, 474, UI_GRIS);
     if (uiOption(ui, (SDL_Rect){ 500, 510, 230, 42 }, a->autoDefaut ? "Mode AUTO : oui" : "Mode AUTO : non", a->autoDefaut, 1)) {
         a->autoDefaut = !a->autoDefaut;
     }
@@ -712,14 +1116,14 @@ static void ecranPreparation(App *a)
 /** Niveau moyen supposé de l'équipe à un étage (comme le terminal). */
 static int niveauTypique(int etage)
 {
-    return 1 + (etage - 1) * 3 / 2;
+    return combatNiveauRequis(etage);
 }
 
 static void ecranBestiaire(App *a)
 {
     Ui *ui = &a->ui;
     titre(a, "Bestiaire");
-    aide(a, "Clic : choisir un monstre · Échap : retour");
+    aide(a, "Clic|monstre;Échap|retour");
     for (int m = 0; m < NB_MONSTRES; m++) {
         SDL_Rect r = { 20, 70 + m * 42, 240, 38 };
         char buf[64];
@@ -773,22 +1177,22 @@ static void ecranElements(App *a)
 {
     Ui *ui = &a->ui;
     titre(a, "Table des éléments");
-    aide(a, "Échap : retour");
+    aide(a, "Échap|retour");
     uiTexte(ui, ui->normale, "Fort contre : +25 % de dégâts et la garde de la cible baisse. Faible contre : -20 %.", 20, 66,
             UI_GRIS);
     for (int e = 0; e < NB_ELEMENTS; e++) {
         SDL_Rect r = { 20, 100 + e * 64, 960, 58 };
         uiCadre(ui, r, UI_PANNEAU, UI_BORD);
-        uiRect(ui, (SDL_Rect){ r.x + 1, r.y + 1, 8, r.h - 2 }, uiCouleurElement(e));
+        uiElementIcone(ui, r.x + 26, r.y + r.h / 2, 16, e);
         char forts[64], faibles[64], buf[256];
         ecrireElements(elementsForts((enum Element)e), forts, sizeof forts);
         ecrireElements(elementsFaibles((enum Element)e), faibles, sizeof faibles);
-        uiTexte(ui, ui->normale, nomElement((enum Element)e), r.x + 22, r.y + 8, uiCouleurElement(e));
+        uiTexte(ui, ui->normale, nomElement((enum Element)e), r.x + 52, r.y + 8, uiCouleurElement(e));
         snprintf(buf, sizeof buf, "fort contre %s   -   faible contre %s", forts, faibles);
-        uiTexte(ui, ui->normale, buf, r.x + 150, r.y + 8, UI_TEXTE);
+        uiTexte(ui, ui->normale, buf, r.x + 170, r.y + 8, UI_TEXTE);
         snprintf(buf, sizeof buf, "Effet des attaques - %s : %s", nomEffetElement((enum Element)e),
                  effetElement((enum Element)e));
-        uiTexte(ui, ui->petite, buf, r.x + 150, r.y + 34, UI_GRIS);
+        uiTexte(ui, ui->petite, buf, r.x + 170, r.y + 34, UI_GRIS);
     }
     char buf[256];
     int n = snprintf(buf, sizeof buf, "Cycle : ");
@@ -804,6 +1208,104 @@ static void ecranElements(App *a)
 }
 
 /* ------------------------------------------------------------------ */
+/*  Emplacements de sauvegarde                                        */
+/* ------------------------------------------------------------------ */
+
+/** Saisie du nom de la partie (mêmes règles que le nom d'un héros). */
+static void saisirNomPartie(App *a)
+{
+    size_t n = strlen(a->nomPartie);
+    for (const char *s = a->ui.texte; *s != '\0'; s++) {
+        if ((unsigned char)*s >= 32 && n + 1 < sizeof a->nomPartie) {
+            a->nomPartie[n++] = *s;
+        }
+    }
+    a->nomPartie[n] = '\0';
+    if (a->ui.touche == SDLK_BACKSPACE && n > 0) {
+        n--;
+        while (n > 0 && ((unsigned char)a->nomPartie[n] & 0xC0) == 0x80) {
+            n--;
+        }
+        a->nomPartie[n] = '\0';
+    }
+}
+
+static void ecranSlots(App *a)
+{
+    Ui *ui = &a->ui;
+    titre(a, a->slotCharger ? "Charger une partie" : "Sauvegarder la partie");
+    aide(a, a->slotCharger ? "Clic|emplacement;Échap|retour"
+                           : "Clic|emplacement;A-Z|nom;Entrée|sauvegarder;Échap|retour");
+    if (a->slotSel >= 0 && !a->slotCharger) {
+        saisirNomPartie(a);
+    }
+
+    for (int k = 0; k < SLOTS_MAX; k++) {
+        const InfoSlot *s = &a->slots[k];
+        SDL_Rect r = { 20, 76 + k * 82, 960, 74 };
+        int choisi = a->slotSel == k;
+        int actif = !a->slotCharger || s->existe;
+        uiCadre(ui, r, choisi ? UI_PANNEAU2 : UI_PANNEAU, choisi ? UI_OR : UI_BORD);
+        char buf[160];
+        snprintf(buf, sizeof buf, "Emplacement %d", k + 1);
+        uiTexte(ui, ui->petite, buf, r.x + 14, r.y + 8, UI_GRIS);
+        if (s->existe) {
+            uiTexte(ui, ui->grande, s->nom, r.x + 14, r.y + 26, actif ? UI_TEXTE : UI_GRIS);
+            snprintf(buf, sizeof buf, "%d héros · niveau max %d", s->nbHeros, s->niveauMax);
+            uiTexteDroite(ui, ui->normale, buf, r.x + r.w - 16, r.y + 12, UI_TEXTE);
+            uiTexteDroite(ui, ui->petite, s->date, r.x + r.w - 16, r.y + 42, UI_GRIS);
+        } else {
+            uiTexte(ui, ui->grande, "Vide", r.x + 14, r.y + 26, UI_GRIS);
+        }
+        if (actif && ui->clic && uiDans(r, ui->sx, ui->sy)) {
+            ui->clic = 0;
+            a->slotSel = k;
+            ui->texte[0] = '\0';
+            if (!a->slotCharger) {
+                /* on propose le nom existant, ou « Partie N » */
+                snprintf(a->nomPartie, sizeof a->nomPartie, "%s", s->existe ? s->nom : "");
+                if (a->nomPartie[0] == '\0') {
+                    snprintf(a->nomPartie, sizeof a->nomPartie, "Partie %d", k + 1);
+                }
+            }
+        }
+    }
+
+    if (a->slotSel >= 0) {
+        const InfoSlot *s = &a->slots[a->slotSel];
+        if (a->slotCharger) {
+            if (uiBouton(ui, (SDL_Rect){ 760, 500, 220, 40 }, "Charger", 1) || ui->touche == SDLK_RETURN) {
+                if (a->donjon.taille > 0) {
+                    a->ecran = ECRAN_CONFIRMER;
+                } else {
+                    chargerDonjon(a, a->slotSel);
+                    a->ecran = ECRAN_MENU;
+                }
+            }
+        } else {
+            uiTexte(ui, ui->normale, "Nom :", 20, 512, UI_GRIS);
+            SDL_Rect champ = { 80, 506, 420, 34 };
+            uiCadre(ui, champ, UI_PANNEAU, UI_OR);
+            char saisie[SLOT_NOM_MAX + 2];
+            snprintf(saisie, sizeof saisie, "%s%s", a->nomPartie, (SDL_GetTicks() / 500) % 2 ? "|" : "");
+            uiTexte(ui, ui->normale, saisie, champ.x + 8, champ.y + 6, UI_TEXTE);
+            int ok = a->nomPartie[0] != '\0';
+            if (uiBouton(ui, (SDL_Rect){ 760, 500, 220, 40 }, s->existe ? "Écraser" : "Sauvegarder", ok)
+                || (ok && ui->touche == SDLK_RETURN)) {
+                sauvegarderDonjon(a, a->slotSel);
+                a->ecran = ECRAN_MENU;
+            }
+            if (s->existe) {
+                uiTexte(ui, ui->petite, "Cet emplacement contient déjà une partie : elle sera remplacée.", 80, 548, UI_ORANGE);
+            }
+        }
+    }
+    if (boutonRetour(a)) {
+        a->ecran = ECRAN_MENU;
+    }
+}
+
+/* ------------------------------------------------------------------ */
 /*  Confirmation du chargement                                        */
 /* ------------------------------------------------------------------ */
 
@@ -811,16 +1313,19 @@ static void ecranConfirmer(App *a)
 {
     Ui *ui = &a->ui;
     titre(a, "Charger une partie");
-    aide(a, "Entrée : confirmer · Échap : annuler");
+    aide(a, "Entrée|confirmer;Échap|annuler");
     char buf[160];
-    snprintf(buf, sizeof buf, "Les %d personnage(s) actuel(s) seront remplacés par la sauvegarde.", a->donjon.taille);
+    snprintf(buf, sizeof buf, "Les %d personnage(s) actuel(s) seront remplacés par « %s ».", a->donjon.taille,
+             a->slots[a->slotSel].nom);
     uiTexteCentre(ui, ui->normale, buf, (SDL_Rect){ 0, 200, UI_LARGEUR, 40 }, UI_TEXTE);
+    uiTexteCentre(ui, ui->petite, "Pensez à sauvegarder la partie en cours si vous voulez la garder.",
+                  (SDL_Rect){ 0, 236, UI_LARGEUR, 20 }, UI_GRIS);
     if (uiBouton(ui, (SDL_Rect){ 300, 280, 190, 48 }, "Confirmer", 1) || ui->touche == SDLK_RETURN) {
-        chargerDonjon(a);
+        chargerDonjon(a, a->slotSel);
         a->ecran = ECRAN_MENU;
     }
     if (uiBouton(ui, (SDL_Rect){ 510, 280, 190, 48 }, "Annuler", 1) || ui->touche == SDLK_ESCAPE) {
-        a->ecran = ECRAN_MENU;
+        a->ecran = ECRAN_SLOTS;
     }
 }
 
@@ -836,7 +1341,7 @@ static void dessinerMessage(App *a, double dt)
     a->messageTemps -= dt;
     SDL_Color c = UI_OR;
     c.a = (Uint8)(a->messageTemps > 1 ? 255 : 255 * a->messageTemps);
-    uiTexte(&a->ui, a->ui.normale, a->message, 20, 612, c);
+    uiTexte(&a->ui, a->ui.normale, a->message, 20, 586, c);
 }
 
 int donjonSdl(void)
@@ -889,6 +1394,8 @@ int donjonSdl(void)
         case ECRAN_BESTIAIRE: ecranBestiaire(a); break;
         case ECRAN_ELEMENTS: ecranElements(a); break;
         case ECRAN_CONFIRMER: ecranConfirmer(a); break;
+        case ECRAN_SLOTS: ecranSlots(a); break;
+        case ECRAN_BOUTIQUE: ecranBoutique(a); break;
         }
         dessinerMessage(a, dt);
         uiFin(&a->ui);

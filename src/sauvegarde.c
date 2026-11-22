@@ -249,3 +249,59 @@ int chargerProgression(const char *nomFichier, Progression *prog)
     *prog = lu;
     return 1;
 }
+
+void cheminSlot(int slot, char *chemin, size_t taille)
+{
+    if (slot <= 0) {
+        snprintf(chemin, taille, "%s", FICHIER_SAUVEGARDE);
+    } else {
+        snprintf(chemin, taille, "donjon_slot%d.sav", slot + 1);
+    }
+}
+
+/** Chemin du fichier qui contient le nom de l'emplacement. */
+static void cheminNomSlot(int slot, char *chemin, size_t taille)
+{
+    char base[64];
+    cheminSlot(slot, base, sizeof base);
+    snprintf(chemin, taille, "%s.nom", base);
+}
+
+int lireNomSlot(int slot, char *nom, size_t taille)
+{
+    char chemin[80];
+    if (nom == NULL || taille == 0) {
+        return 0;
+    }
+    nom[0] = '\0';
+    cheminNomSlot(slot, chemin, sizeof chemin);
+    FILE *f = fopen(chemin, "r");
+    if (f == NULL) {
+        return 0;
+    }
+    if (fgets(nom, (int)taille, f) == NULL) {
+        nom[0] = '\0';
+    }
+    fclose(f);
+    nom[strcspn(nom, "\r\n")] = '\0';
+    return nom[0] != '\0';
+}
+
+int ecrireNomSlot(int slot, const char *nom)
+{
+    char chemin[80];
+    if (nom == NULL) {
+        return 0;
+    }
+    cheminNomSlot(slot, chemin, sizeof chemin);
+    FILE *f = fopen(chemin, "w");
+    if (f == NULL) {
+        perror("fopen");
+        return 0;
+    }
+    int ok = fprintf(f, "%s\n", nom) > 0;
+    if (fclose(f) != 0) {
+        ok = 0;
+    }
+    return ok;
+}

@@ -1257,6 +1257,8 @@ make sdl && ./donjon_sdl      # ou : make run-sdl
 | 9. Bestiaire | Fiche de chaque monstre et ses stats par étage |
 | 10. Table des éléments | Forces, faiblesses et effets de chaque élément |
 | 11. Se reposer au camp | Soigne toute l'équipe |
+| 7. Améliorer un personnage | Onglet **Stats** : niveau, XP, points à répartir (PV +8, ATK +1, DEF +1, VIT +3). Le menu, la liste des héros et l'onglet affichent les points disponibles |
+| Boutique (touche `B`) | Potions, armes et **parchemin d'oubli** (15 foie gras : remet les stats à zéro, les points sont rendus pour être réattribués ; s'utilise depuis le sac ou l'onglet Stats) payés en foie gras, rangées dans le sac du héros choisi (pas de cosmétiques : ils restent propres à Duckgeon) |
 
 ## Le combat (style Honkai: Star Rail)
 
@@ -1270,6 +1272,18 @@ tout moment, **faiblesses élémentaires** qui brisent la garde des monstres.
   scène avec les héros à gauche et les monstres à droite, vie, garde et
   faiblesses au-dessus de chaque monstre, file des tours à gauche, cartes
   des héros en bas, points de compétence en losanges.
+- **Ultimes bien visibles** : chaque carte de héros a une bande `ULTIME` qui se
+  remplit avec l'énergie, devient dorée et pulse quand il est prêt (un rappel
+  s'affiche aussi au-dessus de la scène). L'ultime lancé est annoncé en grand
+  au milieu de l'écran.
+- **Animation d'ultime** : éclair, scène assombrie, héros qui rayonne, anneaux
+  et rayons dans la couleur de son élément, étincelles qui filent vers les
+  ennemis (ou retombent sur l'équipe pour un soin).
+- **Forces et faiblesses d'éléments** (+25 % / -20 %, comme dans le moteur) :
+  médaillon d'élément sur chaque combattant, éléments qui brisent la garde
+  d'un monstre, flèche verte ou rouge sur chaque cible selon l'attaque en
+  préparation, et phrase d'explication dans l'encadré de l'action
+  (« Feu contre Vent : très efficace »).
 - **Commandes** (rappelées en haut de l'écran de combat) :
 
   | Touche | Action |
