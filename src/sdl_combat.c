@@ -55,7 +55,10 @@ static SDL_Rect cubeAnime(const CombatUi *c, int i)
         r.x += (int)((combatEstAllie(i) ? 1 : -1) * 70 * phase);
     }
     if (c->secousse[i] > 0) {
-        r.x += ((int)(c->secousse[i] * 90) % 2 ? 6 : -6);
+        /* le combattant touché sursaute (petit saut) et tremble un peu */
+        double prog = 1.0 - c->secousse[i] / DUREE_COUP;
+        r.y -= (int)(16 * sin(M_PI * (prog > 1 ? 1 : prog)));
+        r.x += ((int)(c->secousse[i] * 90) % 2 ? 4 : -4);
     }
     return r;
 }
@@ -137,14 +140,6 @@ static void ajouterParticules(CombatUi *c, int x, int y, int n, SDL_Color couleu
     }
 }
 
-/** Fait trembler l'écran pendant `duree` secondes (garde le plus long). */
-static void trembler(CombatUi *c, double duree)
-{
-    if (duree > c->tremblement) {
-        c->tremblement = c->tremblementMax = duree;
-    }
-}
-
 /** Fait avancer et dessine les éclats (ils retombent avec la gravité). */
 static void dessinerParticules(CombatUi *c, Ui *ui, double dt)
 {
@@ -179,12 +174,9 @@ static void montrerEffets(CombatUi *c)
         case EFFET_DEGATS:
             snprintf(texte, sizeof texte, e->critique ? "-%d !" : "-%d", e->valeur);
             couleur = uiCouleurElement((int)e->element);
-            c->secousse[e->cible] = DUREE_COUP;
             if (c->ultTemps <= 0) { /* l'ultime a son propre impact, plus tard */
+                c->secousse[e->cible] = DUREE_COUP;
                 ajouterParticules(c, r.x + r.w / 2, r.y + r.h / 2, e->critique ? 22 : 10, couleur, e->critique ? 300 : 200);
-                if (e->critique) {
-                    trembler(c, 0.22);
-                }
             }
             break;
         case EFFET_SOIN:
@@ -851,7 +843,7 @@ static void dessinerImpact(CombatUi *c, Ui *ui, SDL_Color col, int element, doub
 /**
  * Animation d'ultime en petit film : bandes de cinéma, le héros saute et
  * charge (anneaux, rayons, aura), puis retombe pendant que les étincelles
- * foncent vers les ennemis ; l'impact fait trembler l'écran et chaque
+ * foncent vers les ennemis ; l'impact fait sursauter les ennemis touchés et chaque
  * élément a sa signature (voir dessinerImpact).
  */
 static void dessinerUltime(CombatUi *c, Ui *ui)
@@ -939,12 +931,12 @@ static void dessinerUltime(CombatUi *c, Ui *ui)
     if (t >= T_IMPACT) {
         if (!c->ultImpact) {
             c->ultImpact = 1;
-            trembler(c, 0.5);
             if (c->ultOffensif) {
                 for (int k = 0; k < cb->nbEffets; k++) {
                     const Effet *e = &cb->effets[k];
                     if (e->type == EFFET_DEGATS && e->cible >= 0 && e->cible < COMBAT_MAX) {
                         SDL_Rect r = cubeFixe(cb, e->cible);
+                        c->secousse[e->cible] = DUREE_COUP * 1.4; /* seuls les ennemis touchés sursautent */
                         ajouterParticules(c, r.x + r.w / 2, r.y + r.h / 2, 26, col, 340);
                     }
                 }
@@ -1154,7 +1146,6 @@ int combatUiImage(CombatUi *c, Ui *ui, Progression *prog, double dt)
     if (c->lunge > 0) c->lunge -= dt;
     if (c->bandeauTemps > 0) c->bandeauTemps -= dt;
     if (c->ultTemps > 0) c->ultTemps -= dt;
-    if (c->tremblement > 0) c->tremblement -= dt;
     for (int i = 0; i < COMBAT_MAX; i++) {
         if (c->secousse[i] > 0) c->secousse[i] -= dt;
     }
@@ -1233,18 +1224,8 @@ int combatUiImage(CombatUi *c, Ui *ui, Progression *prog, double dt)
     }
 
     /* ---- Scène ---- */
-    /* Le décor (sol, mur) et la file de tours restent fixes : seuls les
-     * combattants et les effets tremblent, pour une base stable. */
     dessinerDecor(ui);
     dessinerFile(ui, cb);
-    int tremble = c->tremblement > 0 && c->tremblementMax > 0;
-    SDL_Rect vue = { 0, 0, UI_LARGEUR, UI_HAUTEUR };
-    if (tremble) {
-        double force = 5 * c->tremblement / c->tremblementMax;
-        vue.x = (int)(sin(ui->temps / 17.0) * force);
-        vue.y = (int)(cos(ui->temps / 23.0) * force * 0.6);
-        SDL_RenderSetViewport(ui->rend, &vue);
-    }
 
     /* Cibles touchées par l'action en préparation. */
     unsigned touches = 0;
@@ -1262,7 +1243,6 @@ int combatUiImage(CombatUi *c, Ui *ui, Progression *prog, double dt)
         if (!cb->c[i].present) {
             continue;
         }
-        SDL_RenderSetViewport(ui->rend, (tremble && !combatEstAllie(i)) ? &vue : NULL); /* l'équipe ne tremble pas */
         dessinerCombattant(ui, c, i, !fini && i == cb->actif, 0, manuel);
         /* Un clic sur un cube valide le choisit et joue l'action. */
         if (manuel && ui->clic && c->attente <= 0 && combatCibleValide(cb, c->lanceur, c->action, i)
@@ -1277,18 +1257,15 @@ int combatUiImage(CombatUi *c, Ui *ui, Progression *prog, double dt)
         if (!cb->c[i].present) {
             continue;
         }
-        SDL_RenderSetViewport(ui->rend, (tremble && !combatEstAllie(i)) ? &vue : NULL);
         dessinerCombattant(ui, c, i, !fini && i == cb->actif, 1, manuel);
         if (touches & (1u << i)) {
             SDL_Rect r = cubeFixe(cb, i);
             uiRepere(ui, r.x + r.w / 2, combatEstAllie(i) ? r.y - 22 : r.y - 78, 9, i == c->cible ? UI_OR : UI_TEXTE);
         }
     }
-    SDL_RenderSetViewport(ui->rend, tremble ? &vue : NULL);
     dessinerUltime(c, ui);
     dessinerParticules(c, ui, dt);
     dessinerFlottants(c, ui, dt);
-    SDL_RenderSetViewport(ui->rend, NULL);
     dessinerBandesCinema(c, ui);
 
     dessinerActions(c, ui, manuel, fini);

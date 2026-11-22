@@ -60,8 +60,6 @@ typedef struct {
     int ultOffensif;       /**< 1 : l'ultime vise les ennemis              */
     double bandeauDuree;   /**< Durée totale de l'annonce (pour l'animer)         */
     int ultImpact;         /**< 1 : l'impact de l'ultime a déjà eu lieu           */
-    double tremblement;    /**< Secondes restantes de tremblement de l'écran      */
-    double tremblementMax; /**< Durée totale de ce tremblement                    */
     Flottant flottants[FLOTTANTS_MAX];
     Particule particules[PARTICULES_MAX];
 } CombatUi;
